@@ -134,6 +134,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
+    "https://pi2-stock-system.vercel.app/",
     "http://localhost:8080",  # Frontend Vite dev server
     "http://127.0.0.1:8080",
     "http://localhost:3000",  # Alternative React dev server
