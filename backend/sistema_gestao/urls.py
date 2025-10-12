@@ -17,9 +17,23 @@ Including another URLconf
 # meuprojeto/urls.py
 
 from django.contrib import admin
-from django.urls import path, include  # <-- Adicione 'include'
+from django.urls import path, include
+from django.http import JsonResponse
+
+def home(request):
+    return JsonResponse({
+        'message': 'Sistema de Gestão de Estoque - API Backend',
+        'version': '1.0.0',
+        'endpoints': {
+            'products': '/api/products/',
+            'categories': '/api/categories/',
+            'dashboard': '/api/dashboard/stats/',
+            'admin': '/admin/'
+        }
+    })
 
 urlpatterns = [
+    path('', home, name='home'),
     path('admin/', admin.site.urls),
-    path('', include('core.urls')),  # <-- Adicione esta linha
+    path('api/', include('core.urls')),
 ]
