@@ -5,18 +5,27 @@ from .models import Product, Category, Brand
 from import_export import resources, fields, widgets
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
+import datetime  # <-- Importe o módulo datetime
 
-# --- VERSÃO CORRIGIDA DO WIDGET DE DATA ---
+# --- VERSÃO FINAL E CORRIGIDA DO WIDGET DE DATA ---
 class PermissiveDateWidget(widgets.DateWidget):
     def clean(self, value, row=None, *args, **kwargs):
-        # Primeiro, verifica se o valor está vazio.
+        # 1. Se o valor estiver vazio, é um produto sem validade.
         if not value:
             return None
-        # Em seguida, verifica se é um texto antes de usar .strip()
-        if isinstance(value, str) and value.strip() == '-':
+        
+        # 2. Se o valor já for um objeto de data (convertido pelo leitor de Excel),
+        # apenas retorne a parte da data.
+        if isinstance(value, datetime.datetime):
+            return value.date()
+        if isinstance(value, datetime.date):
+            return value
+
+        # 3. Se for um texto, verifique se é um placeholder para 'vazio'.
+        if isinstance(value, str) and value.strip() in ('', '-'):
             return None
-        # Para todos os outros casos (incluindo quando o valor já é um objeto de data),
-        # deixa a lógica padrão da biblioteca fazer o trabalho.
+        
+        # 4. Se for um texto com uma data, deixe a lógica original fazer o parsing.
         return super().clean(value, row, *args, **kwargs)
 
 # Widget genérico para criar ou obter chaves estrangeiras (sem alterações)
@@ -45,7 +54,7 @@ class ProductResource(resources.ModelResource):
     expiration_date = fields.Field(
         attribute='expiration_date',
         column_name='Validade',
-        widget=PermissiveDateWidget(format='%d/%m/%Y')) # Continua usando nosso widget corrigido
+        widget=PermissiveDateWidget(format='%d/%m/%Y')) # Usa nosso widget final
     quantity = fields.Field(attribute='quantity', column_name='Quantidade em Estoque')
 
     class Meta:
