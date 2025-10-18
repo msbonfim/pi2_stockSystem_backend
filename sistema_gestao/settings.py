@@ -32,6 +32,7 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get
 # Application definition
 
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,6 +43,7 @@ INSTALLED_APPS = [
     'core',
     'rest_framework',
     'django_filters',
+    'import_export',
 ]
 
 MIDDLEWARE = [
@@ -134,13 +136,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
-    "https://pi2-stock-system.vercel.app/",
+    
     "http://localhost:8080",  # Frontend Vite dev server
     "http://127.0.0.1:8080",
     "http://localhost:3000",  # Alternative React dev server
     "http://127.0.0.1:3000",
     # Adicione aqui o domínio do seu frontend quando estiver em produção
     # "https://seu-frontend.onrender.com",
+    "https://pi2-stock-system.vercel.app",
 ]
 
 # Para desenvolvimento, permitir qualquer origem (remover em produção)
@@ -160,4 +163,72 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
+}
+
+#JAzzmin configuration
+
+JAZZMIN_SETTINGS = {
+    # Título da janela do navegador (pode ser o mesmo que o seu site)
+    "site_title": "StockSystem Admin",
+
+    # Título no cabeçalho
+    "site_header": "StockSystem",
+
+    # Logo para o seu site, pode ser o mesmo do frontend
+    "site_logo": "caminho/para/seu/logo.png", # Opcional
+
+    # Texto de boas-vindas na tela de login
+    "welcome_sign": "Bem-vindo ao StockSystem Admin",
+
+    # Copyright no rodapé
+    "copyright": "StockSystem Ltd.",
+
+    # Ícones para os seus modelos (usando FontAwesome)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+        "core.Product": "fas fa-box-open", # Ícone para Produtos
+        "core.Category": "fas fa-tags",   # Ícone para Categorias
+    },
+
+    #################
+    # Tema da UI
+    #################
+    # Use um tema escuro. "darkly" e "cyborg" são boas opções para começar.
+    "theme": "darkly",
+
+    # Opções para customizar a UI
+    "ui_tweaks": {
+        "navbar_small_text": False,
+        "footer_small_text": False,
+        "body_small_text": False,
+        "brand_small_text": False,
+        "brand_colour": "navbar-purple", # Use cores do Bootstrap, como "navbar-purple"
+        "accent": "accent-primary",
+        "navbar": "navbar-dark",
+        "no_navbar_border": False,
+        "navbar_fixed": True,
+        "layout_boxed": False,
+        "footer_fixed": False,
+        "sidebar_fixed": True,
+        "sidebar": "sidebar-dark-purple", # Cor da barra lateral
+        "sidebar_nav_small_text": False,
+        "sidebar_disable_expand": False,
+        "sidebar_nav_child_indent": False,
+        "sidebar_nav_compact_style": False,
+        "sidebar_nav_legacy_style": False,
+        "sidebar_nav_flat_style": True, # Deixa o menu mais "flat", parecido com o seu
+        "theme": "darkly",
+        "dark_mode_theme": None,
+        "button_classes": {
+            "primary": "btn-outline-primary",
+            "secondary": "btn-outline-secondary",
+            "info": "btn-info",
+            "warning": "btn-warning",
+            "danger": "btn-danger",
+            "success": "btn-success"
+        },
+        "actions_sticky_top": True
+    }
 }

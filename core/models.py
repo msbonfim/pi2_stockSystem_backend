@@ -13,6 +13,16 @@ class Category(models.Model):
         verbose_name_plural = "Categorias"
         ordering = ['name']
 
+class Brand(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="Nome da Marca")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Marca"
+        verbose_name_plural = "Marcas"
+        ordering = ['name']
 
 class Product(models.Model):
     name = models.CharField(max_length=200, verbose_name="Nome")
@@ -30,6 +40,16 @@ class Product(models.Model):
         related_name='products',
         verbose_name="Categoria"
     )
+
+    brand = models.ForeignKey(
+        Brand,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='products',
+        verbose_name="Marca"
+    )
+    
     batch = models.CharField(max_length=100, blank=True, null=True, verbose_name="Lote")
 
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
