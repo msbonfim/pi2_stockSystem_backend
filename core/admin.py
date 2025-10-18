@@ -6,17 +6,20 @@ from import_export import resources, fields, widgets
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 
-# --- NOVO WIDGET DE DATA PERMISSIVO ---
-# Este widget converte valores vazios ou hífens em None (sem data).
-# Para outros valores, ele tenta processar como uma data no formato DD/MM/YYYY.
+# --- VERSÃO CORRIGIDA DO WIDGET DE DATA ---
 class PermissiveDateWidget(widgets.DateWidget):
     def clean(self, value, row=None, *args, **kwargs):
-        if not value or value.strip() == '-':
-            return None  # Retorna None para células vazias ou com hífen
-        # Para todos os outros casos, usa a lógica padrão para processar a data
+        # Primeiro, verifica se o valor está vazio.
+        if not value:
+            return None
+        # Em seguida, verifica se é um texto antes de usar .strip()
+        if isinstance(value, str) and value.strip() == '-':
+            return None
+        # Para todos os outros casos (incluindo quando o valor já é um objeto de data),
+        # deixa a lógica padrão da biblioteca fazer o trabalho.
         return super().clean(value, row, *args, **kwargs)
 
-# Widget genérico para criar ou obter chaves estrangeiras
+# Widget genérico para criar ou obter chaves estrangeiras (sem alterações)
 class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
     def clean(self, value, row=None, *args, **kwargs):
         if not value:
@@ -26,7 +29,7 @@ class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
         except self.model.DoesNotExist:
             return self.model.objects.create(**{self.field: value})
 
-# --- VERSÃO ATUALIZADA DO ProductResource ---
+# Resource explícito (sem alterações)
 class ProductResource(resources.ModelResource):
     name = fields.Field(attribute='name', column_name='Nome do Produto')
     category = fields.Field(
@@ -39,14 +42,10 @@ class ProductResource(resources.ModelResource):
         widget=CreateOrGetForeignKeyWidget(Brand, 'name'))
     price = fields.Field(attribute='price', column_name='Preço de Venda (R$)')
     description = fields.Field(attribute='description', column_name='Descrição')
-    
-    # --- AQUI ESTÁ A MUDANÇA PRINCIPAL ---
-    # Usando o novo widget permissivo para a data de validade
     expiration_date = fields.Field(
         attribute='expiration_date',
         column_name='Validade',
-        widget=PermissiveDateWidget(format='%d/%m/%Y')) # <-- MUDANÇA AQUI
-        
+        widget=PermissiveDateWidget(format='%d/%m/%Y')) # Continua usando nosso widget corrigido
     quantity = fields.Field(attribute='quantity', column_name='Quantidade em Estoque')
 
     class Meta:
@@ -55,7 +54,7 @@ class ProductResource(resources.ModelResource):
         skip_unchanged = True
         report_skipped = True
 
-# --- Registrando o novo modelo BrandAdmin ---
+# O resto do arquivo admin.py continua igual
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     list_display = ('name',)
