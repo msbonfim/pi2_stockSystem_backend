@@ -60,6 +60,7 @@ class ProductResource(resources.ModelResource):
     class Meta:
         model = Product
         fields = ('id', 'name', 'category', 'brand', 'price', 'description', 'expiration_date', 'quantity', 'batch')
+        import_id_fields = ('name',)
         skip_unchanged = True
         report_skipped = True
 
