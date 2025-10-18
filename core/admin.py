@@ -7,7 +7,7 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 import datetime
 
-# --- WIDGETS PERSONALIZADOS (sem alterações) ---
+# --- WIDGETS PERSONALIZADOS (com a correção) ---
 
 class PermissiveDateWidget(widgets.DateWidget):
     def clean(self, value, row=None, *args, **kwargs):
@@ -25,18 +25,17 @@ class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
         except self.model.DoesNotExist:
             return self.model.objects.create(**{self.field: value})
 
+# --- ALTERAÇÃO AQUI: CORRIGINDO A ASSINATURA DO MÉTODO RENDER ---
 class BrazilianDecimalWidget(widgets.DecimalWidget):
-    def render(self, value, export_context=None):
+    # Adicionamos **kwargs para aceitar quaisquer argumentos extras
+    def render(self, value, **kwargs):
         if value is None:
             return ""
         # Formata com 2 casas decimais e substitui o ponto pela vírgula.
         return f"{value:.2f}".replace('.', ',')
 
-# --- VERSÃO FINAL E EXPLÍCITA DO ProductResource ---
+# --- VERSÃO FINAL E EXPLÍCITA DO ProductResource (sem alterações) ---
 class ProductResource(resources.ModelResource):
-    # Declaramos CADA campo que queremos no Excel, na ordem desejada.
-    # Isso nos dá controle total sobre importação e exportação.
-
     id = fields.Field(attribute='id', column_name='id')
     name = fields.Field(attribute='name', column_name='Nome do Produto')
     category = fields.Field(
@@ -50,24 +49,23 @@ class ProductResource(resources.ModelResource):
     price = fields.Field(
         attribute='price', 
         column_name='Preço de Venda (R$)', 
-        widget=BrazilianDecimalWidget()) # Nosso widget para vírgula
+        widget=BrazilianDecimalWidget())
     description = fields.Field(attribute='description', column_name='Descrição')
     expiration_date = fields.Field(
         attribute='expiration_date',
         column_name='Validade',
-        widget=PermissiveDateWidget(format='%d/%m/%Y')) # Nosso widget para data
+        widget=PermissiveDateWidget(format='%d/%m/%Y'))
     quantity = fields.Field(attribute='quantity', column_name='Quantidade em Estoque')
     batch = fields.Field(attribute='batch', column_name='Lote')
 
     class Meta:
         model = Product
-        # REMOVEMOS a tupla 'fields' para evitar conflitos. A ordem agora é
-        # definida pela declaração dos campos acima.
         import_id_fields = ('id',)
         skip_unchanged = True
         report_skipped = True
 
 # --- O RESTO DO ARQUIVO CONTINUA IGUAL ---
+# ... (suas classes BrandAdmin, ProductAdmin e CategoryAdmin) ...
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     list_display = ('name',)

@@ -200,7 +200,7 @@ JAZZMIN_SETTINGS = {
     #################
     # Use um tema escuro. "darkly" e "cyborg" são boas opções para começar.
     "theme": "simplex",
-
+    "show_ui_builder": True,
     # Opções para customizar a UI
     "ui_tweaks": {
         "navbar_small_text": False,
