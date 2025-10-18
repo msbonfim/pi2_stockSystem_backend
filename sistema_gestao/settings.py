@@ -122,7 +122,9 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
@@ -174,8 +176,9 @@ JAZZMIN_SETTINGS = {
     # Título no cabeçalho
     "site_header": "StockSystem",
 
+    "site_brand": "StockSystem",
     # Logo para o seu site, pode ser o mesmo do frontend
-    "site_logo": "caminho/para/seu/logo.png", # Opcional
+    "site_logo": "images/pwa-64x64.png", # Opcional
 
     # Texto de boas-vindas na tela de login
     "welcome_sign": "Bem-vindo ao StockSystem Admin",
@@ -196,7 +199,7 @@ JAZZMIN_SETTINGS = {
     # Tema da UI
     #################
     # Use um tema escuro. "darkly" e "cyborg" são boas opções para começar.
-    "theme": "darkly",
+    "theme": "flatly",
 
     # Opções para customizar a UI
     "ui_tweaks": {
