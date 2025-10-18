@@ -7,7 +7,8 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 import datetime
 
-# --- WIDGET DE DATA (JÁ EXISTENTE, SEM ALTERAÇÕES) ---
+# --- WIDGETS PERSONALIZADOS (sem alterações) ---
+
 class PermissiveDateWidget(widgets.DateWidget):
     def clean(self, value, row=None, *args, **kwargs):
         if not value: return None
@@ -16,7 +17,6 @@ class PermissiveDateWidget(widgets.DateWidget):
         if isinstance(value, str) and value.strip() in ('', '-'): return None
         return super().clean(value, row, *args, **kwargs)
 
-# --- WIDGET DE CHAVE ESTRANGEIRA (JÁ EXISTENTE, SEM ALTERAÇÕES) ---
 class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
     def clean(self, value, row=None, *args, **kwargs):
         if not value: return None
@@ -25,17 +25,18 @@ class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
         except self.model.DoesNotExist:
             return self.model.objects.create(**{self.field: value})
 
-# --- ALTERAÇÃO 1: CRIAR UM WIDGET PARA FORMATAR O PREÇO ---
-# Este widget irá renderizar o número decimal com vírgula na exportação.
 class BrazilianDecimalWidget(widgets.DecimalWidget):
     def render(self, value, export_context=None):
         if value is None:
             return ""
-        # Converte o valor para string e substitui o ponto pela vírgula.
-        return str(value).replace('.', ',')
+        # Formata com 2 casas decimais e substitui o ponto pela vírgula.
+        return f"{value:.2f}".replace('.', ',')
 
-# --- VERSÃO FINAL DO ProductResource ---
+# --- VERSÃO FINAL E EXPLÍCITA DO ProductResource ---
 class ProductResource(resources.ModelResource):
+    # Declaramos CADA campo que queremos no Excel, na ordem desejada.
+    # Isso nos dá controle total sobre importação e exportação.
+
     id = fields.Field(attribute='id', column_name='id')
     name = fields.Field(attribute='name', column_name='Nome do Produto')
     category = fields.Field(
@@ -46,27 +47,22 @@ class ProductResource(resources.ModelResource):
         attribute='brand',
         column_name='Marca',
         widget=CreateOrGetForeignKeyWidget(Brand, 'name'))
-    
-    # --- ALTERAÇÃO 2: APLICAR O WIDGET DE PREÇO ---
     price = fields.Field(
         attribute='price', 
         column_name='Preço de Venda (R$)', 
-        widget=BrazilianDecimalWidget()) # <-- APLICA O WIDGET AQUI
-
+        widget=BrazilianDecimalWidget()) # Nosso widget para vírgula
     description = fields.Field(attribute='description', column_name='Descrição')
-
-    # --- ALTERAÇÃO 3: AJUSTAR O WIDGET DE DATA PARA EXPORTAÇÃO ---
     expiration_date = fields.Field(
         attribute='expiration_date',
         column_name='Validade',
-        # Para importação, usa o PermissiveDateWidget. Para exportação, usa o formato brasileiro.
-        widget=PermissiveDateWidget(format='%d/%m/%Y')) 
-
+        widget=PermissiveDateWidget(format='%d/%m/%Y')) # Nosso widget para data
     quantity = fields.Field(attribute='quantity', column_name='Quantidade em Estoque')
+    batch = fields.Field(attribute='batch', column_name='Lote')
 
     class Meta:
         model = Product
-        fields = ('id', 'name', 'category', 'brand', 'price', 'description', 'expiration_date', 'quantity', 'batch')
+        # REMOVEMOS a tupla 'fields' para evitar conflitos. A ordem agora é
+        # definida pela declaração dos campos acima.
         import_id_fields = ('id',)
         skip_unchanged = True
         report_skipped = True

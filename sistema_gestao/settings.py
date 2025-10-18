@@ -199,7 +199,7 @@ JAZZMIN_SETTINGS = {
     # Tema da UI
     #################
     # Use um tema escuro. "darkly" e "cyborg" são boas opções para começar.
-    "theme": "flatly",
+    "theme": "simplex",
 
     # Opções para customizar a UI
     "ui_tweaks": {
