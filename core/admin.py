@@ -7,7 +7,7 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 import datetime
 
-# --- WIDGETS PERSONALIZADOS (com a correção) ---
+# --- WIDGETS PERSONALIZADOS (COM A CORREÇÃO DEFINITIVA) ---
 
 class PermissiveDateWidget(widgets.DateWidget):
     def clean(self, value, row=None, *args, **kwargs):
@@ -25,16 +25,15 @@ class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
         except self.model.DoesNotExist:
             return self.model.objects.create(**{self.field: value})
 
-# --- ALTERAÇÃO AQUI: CORRIGINDO A ASSINATURA DO MÉTODO RENDER ---
+# --- CORREÇÃO DEFINITIVA AQUI ---
+# A função render agora aceita *qualquer* argumento extra sem quebrar.
 class BrazilianDecimalWidget(widgets.DecimalWidget):
-    # Adicionamos **kwargs para aceitar quaisquer argumentos extras
-    def render(self, value, **kwargs):
+    def render(self, value, *args, **kwargs):
         if value is None:
             return ""
-        # Formata com 2 casas decimais e substitui o ponto pela vírgula.
         return f"{value:.2f}".replace('.', ',')
 
-# --- VERSÃO FINAL E EXPLÍCITA DO ProductResource (sem alterações) ---
+# --- RECURSO DO PRODUTO (SEM ALTERAÇÕES) ---
 class ProductResource(resources.ModelResource):
     id = fields.Field(attribute='id', column_name='id')
     name = fields.Field(attribute='name', column_name='Nome do Produto')
@@ -64,8 +63,8 @@ class ProductResource(resources.ModelResource):
         skip_unchanged = True
         report_skipped = True
 
-# --- O RESTO DO ARQUIVO CONTINUA IGUAL ---
-# ... (suas classes BrandAdmin, ProductAdmin e CategoryAdmin) ...
+# --- ADMINS (SEM ALTERAÇÕES) ---
+
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     list_display = ('name',)
