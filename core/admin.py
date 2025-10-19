@@ -7,8 +7,7 @@ from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
 import datetime
 
-# --- WIDGETS PERSONALIZADOS (COM A CORREÇÃO DEFINITIVA) ---
-
+# --- WIDGET DE DATA QUE FUNCIONA ---
 class PermissiveDateWidget(widgets.DateWidget):
     def clean(self, value, row=None, *args, **kwargs):
         if not value: return None
@@ -17,6 +16,7 @@ class PermissiveDateWidget(widgets.DateWidget):
         if isinstance(value, str) and value.strip() in ('', '-'): return None
         return super().clean(value, row, *args, **kwargs)
 
+# --- WIDGET DE CHAVE ESTRANGEIRA QUE FUNCIONA ---
 class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
     def clean(self, value, row=None, *args, **kwargs):
         if not value: return None
@@ -25,46 +25,43 @@ class CreateOrGetForeignKeyWidget(ForeignKeyWidget):
         except self.model.DoesNotExist:
             return self.model.objects.create(**{self.field: value})
 
-# --- CORREÇÃO DEFINITIVA AQUI ---
-# A função render agora aceita *qualquer* argumento extra sem quebrar.
-class BrazilianDecimalWidget(widgets.DecimalWidget):
-    def render(self, value, *args, **kwargs):
-        if value is None:
-            return ""
-        return f"{value:.2f}".replace('.', ',')
-
-# --- RECURSO DO PRODUTO (SEM ALTERAÇÕES) ---
+# --- VERSÃO ESTÁVEL DO ProductResource (SEM A FORMATAÇÃO DE EXPORTAÇÃO) ---
 class ProductResource(resources.ModelResource):
-    id = fields.Field(attribute='id', column_name='id')
-    name = fields.Field(attribute='name', column_name='Nome do Produto')
+    # Definimos apenas os campos que precisam de lógica especial (criar FK)
     category = fields.Field(
-        attribute='category',
         column_name='Categoria',
+        attribute='category',
         widget=CreateOrGetForeignKeyWidget(Category, 'name'))
+    
     brand = fields.Field(
-        attribute='brand',
         column_name='Marca',
+        attribute='brand',
         widget=CreateOrGetForeignKeyWidget(Brand, 'name'))
-    price = fields.Field(
-        attribute='price', 
-        column_name='Preço de Venda (R$)', 
-        widget=BrazilianDecimalWidget())
-    description = fields.Field(attribute='description', column_name='Descrição')
-    expiration_date = fields.Field(
-        attribute='expiration_date',
-        column_name='Validade',
-        widget=PermissiveDateWidget(format='%d/%m/%Y'))
-    quantity = fields.Field(attribute='quantity', column_name='Quantidade em Estoque')
-    batch = fields.Field(attribute='batch', column_name='Lote')
 
     class Meta:
         model = Product
+        # Usamos esta lista para definir os campos e a ordem
+        fields = ('id', 'name', 'category', 'brand', 'price', 'description', 'expiration_date', 'quantity', 'batch')
+        export_order = fields
         import_id_fields = ('id',)
         skip_unchanged = True
-        report_skipped = True
 
-# --- ADMINS (SEM ALTERAÇÕES) ---
+        # Usamos o before_import para mapear as colunas da sua planilha
+        def before_import(self, dataset, using_transactions, dry_run, **kwargs):
+            header_map = {
+                'Nome do Produto': 'name',
+                'Preço de Venda (R$)': 'price',
+                'Descrição': 'description',
+                'Validade': 'expiration_date',
+                'Quantidade em Estoque': 'quantity',
+                'Lote': 'batch',
+            }
+            new_headers = []
+            for header in dataset.headers:
+                new_headers.append(header_map.get(header, header))
+            dataset.headers = new_headers
 
+# --- O RESTO DO ARQUIVO CONTINUA IGUAL ---
 @admin.register(Brand)
 class BrandAdmin(admin.ModelAdmin):
     list_display = ('name',)
