@@ -127,7 +127,13 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Configuração do WhiteNoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Usando CompressedStaticFilesStorage (sem manifest) para evitar problemas com arquivos não encontrados
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+
+# Configurações adicionais do WhiteNoise
+WHITENOISE_USE_FINDERS = False  # Não usar finders, apenas arquivos coletados
+WHITENOISE_AUTOREFRESH = False  # Desabilitar auto-refresh em produção
+WHITENOISE_INDEX_FILE = False  # Não gerar index.html
 
 # Media files (Arquivos de Upload)
 MEDIA_URL = '/media/'

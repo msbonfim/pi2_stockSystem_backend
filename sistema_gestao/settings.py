@@ -152,7 +152,8 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Configuração do WhiteNoise
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Usando CompressedStaticFilesStorage (sem manifest) para evitar problemas com arquivos não encontrados
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Media files (Arquivos de Upload)
 MEDIA_URL = '/media/'
