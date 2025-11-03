@@ -558,8 +558,8 @@ body.admin-accessibility-xxlarge div {
     setTimeout(forceRemoveMargins, 100);
     setTimeout(forceRemoveMargins, 500);
     
-    // Observa mudanças no DOM
-    if (window.MutationObserver) {
+    // Observa mudanças no DOM - apenas se body existir
+    if (window.MutationObserver && document.body) {
         const observer = new MutationObserver(function(mutations) {
             forceRemoveMargins();
         });
@@ -569,6 +569,23 @@ body.admin-accessibility-xxlarge div {
             attributes: true,
             attributeFilter: ['style', 'class']
         });
+    } else if (window.MutationObserver) {
+        // Se body ainda não existe, aguardar
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                if (document.body) {
+                    const observer = new MutationObserver(function(mutations) {
+                        forceRemoveMargins();
+                    });
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['style', 'class']
+                    });
+                }
+            });
+        }
     }
 })();
 </script>
