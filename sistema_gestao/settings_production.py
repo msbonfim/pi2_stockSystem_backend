@@ -131,9 +131,11 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Configurações adicionais do WhiteNoise
-WHITENOISE_USE_FINDERS = False  # Não usar finders, apenas arquivos coletados
+# Habilitar finders como fallback caso os arquivos não estejam coletados
+WHITENOISE_USE_FINDERS = True  # Permitir encontrar arquivos mesmo se não coletados
 WHITENOISE_AUTOREFRESH = False  # Desabilitar auto-refresh em produção
 WHITENOISE_INDEX_FILE = False  # Não gerar index.html
+WHITENOISE_ROOT = STATIC_ROOT  # Diretório raiz dos arquivos estáticos
 
 # Media files (Arquivos de Upload)
 MEDIA_URL = '/media/'
