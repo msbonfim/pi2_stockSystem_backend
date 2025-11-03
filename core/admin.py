@@ -1,7 +1,9 @@
 # core/admin.py
 
 from django.contrib import admin
-from .models import Product, Category, Brand
+from django.template.response import TemplateResponse
+from django.urls import path
+from .models import Product, Category, Brand, Notification, PushSubscription
 from import_export import resources, fields, widgets
 from import_export.admin import ImportExportModelAdmin
 from import_export.widgets import ForeignKeyWidget
@@ -81,3 +83,292 @@ class ProductAdmin(ImportExportModelAdmin, admin.ModelAdmin):
 class CategoryAdmin(admin.ModelAdmin):
     list_display = ('name',)
     search_fields = ('name',)
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('title', 'notification_type', 'read', 'product', 'created_at')
+    list_filter = ('notification_type', 'read', 'created_at')
+    search_fields = ('title', 'message', 'product__name')
+    readonly_fields = ('created_at',)
+    ordering = ('-created_at',)
+    list_per_page = 20
+
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'endpoint', 'active', 'created_at')
+    list_filter = ('active', 'created_at')
+    search_fields = ('endpoint', 'user__username')
+    readonly_fields = ('created_at',)
+    ordering = ('-created_at',)
+    list_per_page = 20
+
+
+# Customização dos modelos do Django Q para tradução
+try:
+    from django_q.models import Schedule, Failure, OrmQ, Success
+    from django.contrib import admin
+    from django.utils import timezone
+    from django.utils.html import format_html
+    from django.utils.translation import gettext_lazy as _
+    
+    # Customização do Schedule
+    if admin.site.is_registered(Schedule):
+        admin.site.unregister(Schedule)
+    
+    @admin.register(Schedule)
+    class ScheduleAdmin(admin.ModelAdmin):
+        """Admin customizado para Schedules com interface melhorada"""
+        list_display = ('name', 'func_display', 'schedule_type_display', 'next_run_display', 'repeats_display', 'is_active_display')
+        list_filter = ('schedule_type', 'repeats')
+        search_fields = ('name', 'func')
+        fieldsets = (
+            ('Informações Básicas', {
+                'fields': ('name', 'func')
+            }),
+            ('Agendamento', {
+                'fields': ('schedule_type', 'next_run', 'minutes', 'repeats'),
+                'description': 'Configure quando e com que frequência a tarefa será executada.'
+            }),
+            ('Parâmetros da Função', {
+                'fields': ('args', 'kwargs'),
+                'description': 'Argumentos e parâmetros que serão passados para a função. Use formato JSON para kwargs (ex: {"min_quantity": 2}).',
+                'classes': ('collapse',)
+            }),
+            ('Hook (Opcional)', {
+                'fields': ('hook',),
+                'classes': ('collapse',)
+            }),
+        )
+        readonly_fields = ()
+        
+        def func_display(self, obj):
+            """Mostra a função de forma limpa"""
+            func = obj.func or ''
+            # Remove markdown se existir
+            import re
+            match = re.search(r'`([^`]+)`', func)
+            if match:
+                func = match.group(1)
+            return format_html('<code>{}</code>', func)
+        func_display.short_description = 'Função'
+        
+        def schedule_type_display(self, obj):
+            """Mostra o tipo de agendamento com ícone"""
+            type_map = {
+                'I': '⏱️ Imediato',
+                'O': '🔁 Uma vez',
+                'H': '⏰ Por hora',
+                'D': '📅 Diário',
+                'W': '📆 Semanal',
+                'M': '📅 Mensal',
+                'Q': '📅 Trimestral',
+                'Y': '📅 Anual',
+            }
+            return type_map.get(obj.schedule_type, obj.get_schedule_type_display())
+        schedule_type_display.short_description = 'Tipo'
+        
+        def next_run_display(self, obj):
+            """Mostra a próxima execução formatada no timezone local"""
+            if not obj.next_run:
+                return format_html('<span style="color: gray;">Não agendado</span>')
+            
+            try:
+                from django.utils import timezone
+                from django.conf import settings
+                from datetime import datetime
+                
+                dt = obj.next_run
+                
+                # Se USE_TZ está desabilitado, usa datetime diretamente sem conversão
+                if not getattr(settings, 'USE_TZ', False):
+                    local_time = dt
+                    now = datetime.now()
+                else:
+                    # Se USE_TZ está habilitado, precisa converter
+                    if not timezone.is_aware(dt):
+                        # Se for naive, converte para aware primeiro
+                        try:
+                            dt = timezone.make_aware(dt)
+                        except Exception:
+                            # Se make_aware falhar, tenta com UTC explicitamente
+                            try:
+                                import pytz
+                                dt = pytz.UTC.localize(dt)
+                            except (ImportError, Exception):
+                                # Se tudo falhar, usa diretamente
+                                local_time = dt
+                                now = datetime.now()
+                                return dt.strftime('%d/%m/%Y %H:%M')
+                    
+                    # Só chama localtime se for aware
+                    if timezone.is_aware(dt):
+                        local_time = timezone.localtime(dt)
+                        now = timezone.localtime(timezone.now())
+                    else:
+                        local_time = dt
+                        now = datetime.now()
+                
+                if local_time <= now:
+                    return format_html(
+                        '<span style="color: orange;">⚠️ {}</span>',
+                        local_time.strftime('%d/%m/%Y %H:%M')
+                    )
+                return local_time.strftime('%d/%m/%Y %H:%M')
+            except Exception:
+                # Em caso de erro, mostra o valor original formatado de forma simples
+                try:
+                    return obj.next_run.strftime('%d/%m/%Y %H:%M') if obj.next_run else 'N/A'
+                except:
+                    return str(obj.next_run)
+        next_run_display.short_description = 'Próxima Execução'
+        
+        def repeats_display(self, obj):
+            """Mostra quantas vezes vai repetir"""
+            if obj.repeats == -1:
+                return format_html('<span style="color: green;">♾️ Infinito</span>')
+            elif obj.repeats == 0:
+                return format_html('<span style="color: gray;">Não repete</span>')
+            else:
+                return f'🔄 {obj.repeats} vez(es)'
+        repeats_display.short_description = 'Repetições'
+        
+        def is_active_display(self, obj):
+            """Indica se está ativo"""
+            if not obj.next_run:
+                return format_html('<span style="color: red;">❌ Inativo</span>')
+            
+            try:
+                from django.utils import timezone
+                from django.conf import settings
+                from datetime import datetime
+                
+                dt = obj.next_run
+                
+                # Se USE_TZ está desabilitado, usa datetime diretamente sem conversão
+                if not getattr(settings, 'USE_TZ', False):
+                    local_time = dt
+                    now = datetime.now()
+                else:
+                    # Se USE_TZ está habilitado, precisa converter
+                    if not timezone.is_aware(dt):
+                        # Se for naive, converte para aware primeiro
+                        try:
+                            dt = timezone.make_aware(dt)
+                        except Exception:
+                            # Se make_aware falhar, tenta com UTC explicitamente
+                            try:
+                                import pytz
+                                dt = pytz.UTC.localize(dt)
+                            except (ImportError, Exception):
+                                # Se tudo falhar, usa diretamente
+                                local_time = dt
+                                now = datetime.now()
+                                return format_html('<span style="color: green;">✅ Ativo</span>') if dt > now else format_html('<span style="color: orange;">⚠️ Próxima execução no passado</span>')
+                    
+                    # Só chama localtime se for aware
+                    if timezone.is_aware(dt):
+                        local_time = timezone.localtime(dt)
+                        now = timezone.localtime(timezone.now())
+                    else:
+                        local_time = dt
+                        now = datetime.now()
+                
+                if local_time > now:
+                    return format_html('<span style="color: green;">✅ Ativo</span>')
+                else:
+                    return format_html('<span style="color: orange;">⚠️ Próxima execução no passado</span>')
+            except Exception:
+                # Em caso de erro, mostra como inativo
+                return format_html('<span style="color: red;">❌ Erro ao verificar</span>')
+        is_active_display.short_description = 'Status'
+        
+        def save_model(self, request, obj, form, change):
+            """Valida e limpa a função antes de salvar"""
+            # Limpa markdown da função se existir
+            if obj.func:
+                import re
+                match = re.search(r'`([^`]+)`', obj.func)
+                if match:
+                    obj.func = match.group(1)
+                else:
+                    obj.func = obj.func.strip()
+            
+            super().save_model(request, obj, form, change)
+        
+        class Media:
+            css = {
+                'all': ('admin/css/schedule_admin.css',)
+            }
+    
+    # Definir verbose_name traduzido diretamente no modelo
+    Schedule._meta.verbose_name = 'Agendamento'
+    Schedule._meta.verbose_name_plural = 'Agendamentos'
+    
+    # Customização do Failure
+    if admin.site.is_registered(Failure):
+        admin.site.unregister(Failure)
+    
+    @admin.register(Failure)
+    class FailureAdmin(admin.ModelAdmin):
+        """Admin para tarefas que falharam"""
+        list_display = ('name', 'func', 'started', 'stopped')
+        list_filter = ('started',)
+        search_fields = ('name', 'func', 'id')
+        readonly_fields = ('id', 'name', 'func', 'args', 'kwargs', 'started', 'stopped', 'result')
+    
+    Failure._meta.verbose_name = 'Tarefa com Falha'
+    Failure._meta.verbose_name_plural = 'Tarefas com Falhas'
+    
+    # Customização do OrmQ
+    if admin.site.is_registered(OrmQ):
+        admin.site.unregister(OrmQ)
+    
+    @admin.register(OrmQ)
+    class OrmQAdmin(admin.ModelAdmin):
+        """Admin para tarefas na fila"""
+        list_display = ('id', 'key', 'lock')
+        list_filter = ('lock',)
+        search_fields = ('key', 'id')
+        readonly_fields = ('id', 'key', 'payload', 'lock')
+    
+    OrmQ._meta.verbose_name = 'Tarefa em Fila'
+    OrmQ._meta.verbose_name_plural = 'Tarefas em Fila'
+    
+    # Customização do Success
+    if admin.site.is_registered(Success):
+        admin.site.unregister(Success)
+    
+    @admin.register(Success)
+    class SuccessAdmin(admin.ModelAdmin):
+        """Admin para tarefas executadas com sucesso"""
+        list_display = ('name', 'func', 'started', 'stopped')
+        list_filter = ('started', 'stopped')
+        search_fields = ('name', 'func', 'id')
+        readonly_fields = ('id', 'name', 'func', 'args', 'kwargs', 'started', 'stopped', 'result')
+    
+    Success._meta.verbose_name = 'Tarefa Executada com Sucesso'
+    Success._meta.verbose_name_plural = 'Tarefas Executadas com Sucesso'
+
+except ImportError:
+    # Se django_q não estiver disponível, ignora
+    pass
+
+
+# Adiciona painel de acessibilidade ao admin
+class CustomAdminSite(admin.AdminSite):
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('accessibility/', self.admin_view(self.accessibility_view), name='accessibility'),
+        ]
+        return custom_urls + urls
+    
+    def accessibility_view(self, request):
+        from django.shortcuts import render
+        return render(request, 'admin/accessibility_panel.html')
+
+# Ativa o CustomAdminSite para usar as funcionalidades de acessibilidade
+# Comentado por enquanto - descomente se quiser usar URLs customizadas
+# admin.site = CustomAdminSite(name='admin')

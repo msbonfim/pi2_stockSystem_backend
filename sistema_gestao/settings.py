@@ -32,7 +32,7 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',') if os.environ.get
 # Application definition
 
 INSTALLED_APPS = [
-    'jazzmin',
+    'django_q.apps.DjangoQConfig', # DEVE VIR ANTES do admin para que a tradução funcione
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -51,11 +51,13 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir arquivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.AdminModernizationMiddleware',  # Middleware para modernização do admin
 ]
 
 ROOT_URLCONF = 'sistema_gestao.urls'
@@ -63,19 +65,33 @@ ROOT_URLCONF = 'sistema_gestao.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
+        'DIRS': [BASE_DIR / 'core' / 'templates'],
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            'debug': DEBUG,  # Desabilita cache de templates em desenvolvimento
+            'loaders': [
+                'django.template.loaders.filesystem.Loader',
+                'django.template.loaders.app_directories.Loader',
+            ] if DEBUG else [
+                ('django.template.loaders.cached.Loader', [
+                    'django.template.loaders.filesystem.Loader',
+                    'django.template.loaders.app_directories.Loader',
+                ]),
+            ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'sistema_gestao.wsgi.application'
+
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+
+
 
 
 # Database
@@ -111,25 +127,37 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'pt-br'
-
-TIME_ZONE = 'America/Sao_Paulo'
-
 USE_I18N = True
+LANGUAGE_CODE = 'pt-br'  # Django setting; locale directories should use PT_BR
 
-USE_TZ = True
+LANGUAGES = [
+    ('pt-br', 'Português (Brasil)'),
+    ('en', 'English'),
+]
+
+# Project-level and app-level locale lookup
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+    BASE_DIR / 'sistema_gestao' / 'locale',
+]
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 STATICFILES_DIRS = [
     BASE_DIR / "static",
+    BASE_DIR / "core" / "static",  # Static files from core app
 ]
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Configuração do WhiteNoise
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files (Arquivos de Upload)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -167,71 +195,66 @@ REST_FRAMEWORK = {
     ],
 }
 
-#JAzzmin configuration
+Q_CLUSTER = {
+    'name': 'stock_notifications',
+    'workers': 1,  # Número de processos que rodam as tarefas
+    'timeout': 90, # Tempo máximo (segundos) que uma tarefa pode rodar
+    'retry': 120,  # Tempo (segundos) para tentar novamente se falhar
+    'queue_limit': 50,
+    'bulk': 10,
+    'orm': 'default', # Usar o banco de dados padrão do Django
+}
 
-JAZZMIN_SETTINGS = {
-    # Título da janela do navegador (pode ser o mesmo que o seu site)
-    "site_title": "StockSystem Admin",
+# Configuração para agendamento de tarefas
+# O django_q2 permite criar schedules através do admin ou via código
+# Adicione a task check_expiring_products_and_notify no admin em django_q2 > Schedule
+# Ou execute o comando: python manage.py qcluster
 
-    # Título no cabeçalho
-    "site_header": "StockSystem",
+# --- Configuração de E-mail (Verifique/Ajuste) ---
+# Certifique-se de que seu Django está configurado para enviar e-mails.
+# Para testes locais, o console backend é o mais fácil:
 
-    "site_brand": "StockSystem",
-    # Logo para o seu site, pode ser o mesmo do frontend
-    "site_logo": "images/pwa-64x64.png", # Opcional
+# MODE: SMTP (Produção) ou CONSOLE (Desenvolvimento)
+# Para desenvolvimento (e-mails aparecem no console):
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-    # Texto de boas-vindas na tela de login
-    "welcome_sign": "Bem-vindo ao StockSystem Admin",
+# Para produção (e-mails enviados de verdade):
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'  # Gmail (ou 'smtp-mail.outlook.com' para Outlook)
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'msbonfim01@gmail.com'
+EMAIL_HOST_PASSWORD = 'horo yeqi jysy hfcd'  # Senha de app do Gmail
+DEFAULT_FROM_EMAIL = 'msbonfim01@gmail.com'
 
-    # Copyright no rodapé
-    "copyright": "StockSystem Ltd.",
+# Email padrão para envio de notificações (fallback)
+# DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@stockystem.com')
 
-    # Ícones para os seus modelos (usando FontAwesome)
-    "icons": {
-        "auth": "fas fa-users-cog",
-        "auth.user": "fas fa-user",
-        "auth.Group": "fas fa-users",
-        "core.Product": "fas fa-box-open", # Ícone para Produtos
-        "core.Category": "fas fa-tags",   # Ícone para Categorias
-    },
+# Lista de emails para receber notificações (configure com seus emails)
+# NOTIFICATION_EMAILS pode ser configurado via variável de ambiente ou diretamente aqui
+notification_emails_env = os.environ.get('NOTIFICATION_EMAILS', '')
+if notification_emails_env:
+    NOTIFICATION_EMAILS = [email.strip() for email in notification_emails_env.split(',') if email.strip()]
+else:
+    # Configure aqui seus e-mails para receber notificações
+    NOTIFICATION_EMAILS = ['msbonfim01@gmail.com']  # Adicione seus e-mails aqui
 
-    #################
-    # Tema da UI
-    #################
-    # Use um tema escuro. "darkly" e "cyborg" são boas opções para começar.
-    "theme": "simplex",
-    "show_ui_builder": True,
-    # Opções para customizar a UI
-    "ui_tweaks": {
-        "navbar_small_text": False,
-        "footer_small_text": False,
-        "body_small_text": False,
-        "brand_small_text": False,
-        "brand_colour": "navbar-purple", # Use cores do Bootstrap, como "navbar-purple"
-        "accent": "accent-primary",
-        "navbar": "navbar-dark",
-        "no_navbar_border": False,
-        "navbar_fixed": True,
-        "layout_boxed": False,
-        "footer_fixed": False,
-        "sidebar_fixed": True,
-        "sidebar": "sidebar-dark-purple", # Cor da barra lateral
-        "sidebar_nav_small_text": False,
-        "sidebar_disable_expand": False,
-        "sidebar_nav_child_indent": False,
-        "sidebar_nav_compact_style": False,
-        "sidebar_nav_legacy_style": False,
-        "sidebar_nav_flat_style": True, # Deixa o menu mais "flat", parecido com o seu
-        "theme": "darkly",
-        "dark_mode_theme": None,
-        "button_classes": {
-            "primary": "btn-outline-primary",
-            "secondary": "btn-outline-secondary",
-            "info": "btn-info",
-            "warning": "btn-warning",
-            "danger": "btn-danger",
-            "success": "btn-success"
-        },
-        "actions_sticky_top": True
-    }
+# Configurações VAPID para Push Notifications
+# Para gerar as chaves VAPID, execute: python gerar_chaves_vapid.py
+# Ou use um serviço como OneSignal, Firebase Cloud Messaging
+
+# --- Configuração VAPID para Push Notifications ---
+# A chave privada será inserida aqui automaticamente pelo script 'automatizar_chaves.py'.
+# Esta abordagem é mais robusta que ler de um arquivo.
+VAPID_PRIVATE_KEY = """
+-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgCqlwZxvzqKnRSHh3
+UFDJ4KmImtQp/82mlzvwKkFuojWhRANCAASYwF67TKnR37LX6AfQihOWf19ghDwV
+ooNEPjkjeq3nMVZNgMZhGJPabvTBVMNwvMwvvdYZpj53ewGYQCn2+ktL
+-----END PRIVATE KEY-----
+
+""".strip()
+
+VAPID_CLAIMS = {
+    "sub": os.environ.get('VAPID_EMAIL', "mailto:admin@stockystem.com")  # Email de contato para VAPID
 }

@@ -1,23 +1,118 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.db
-*.sqlite3
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Virtualenv
 venv/
-.env/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
 *.env
+.envrc
 
 # Django
+*.log
+*.pot
+*.pyc
+db.sqlite3
+db.sqlite3-journal
+/staticfiles/
 /static/
-media/
+/media/
+*.mo
+*.po
+locale/
 
-# VSCode
+# Django migrations (opcional - descomente se não quiser versionar migrações)
+# */migrations/*.py
+# !*/migrations/__init__.py
+
+# IDEs
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
 
-# Sistema
+# Sistema Operacional
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
+
+# Arquivos temporários
+*.tmp
+*.bak
+*.swp
+*.swo
+*.orig
+*~
+Caused
+Syntax
+Click
+
+# Arquivos de configuração local/sensíveis
+settings_local.py
+local_settings.py
+secrets.json
+
+# Arquivos de teste
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Arquivos específicos do projeto
+*.bat
+*.txt
+*.md
+!requirements.txt
+!README.md
+admin-interface/
+corrigir_schedule.py
+create_test_data.py
+diagnosticar_notificacoes.py
+django.po
+forcar_traducao_menu.py
+gerar_chaves_vapid.py
+testar_*.py
+TESTAR_*.py

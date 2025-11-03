@@ -15,10 +15,11 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-this-in-produc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'pi2-stocksystem-backend.onrender.com').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'pi2-stocksystem-backend.onrender.com').split(',') if os.environ.get('ALLOWED_HOSTS') else ['pi2-stocksystem-backend.onrender.com']
 
 # Application definition
 INSTALLED_APPS = [
+    'django_q.apps.DjangoQConfig',  # DEVE VIR ANTES do admin para que a tradução funcione
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -29,6 +30,7 @@ INSTALLED_APPS = [
     'core',
     'rest_framework',
     'django_filters',
+    'import_export',
 ]
 
 MIDDLEWARE = [
@@ -36,11 +38,13 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir arquivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'core.middleware.AdminModernizationMiddleware',  # Middleware para modernização do admin
 ]
 
 ROOT_URLCONF = 'sistema_gestao.urls'
@@ -48,19 +52,27 @@ ROOT_URLCONF = 'sistema_gestao.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
+        'DIRS': [BASE_DIR / 'core' / 'templates'],
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            'debug': DEBUG,
+            'loaders': [
+                ('django.template.loaders.cached.Loader', [
+                    'django.template.loaders.filesystem.Loader',
+                    'django.template.loaders.app_directories.Loader',
+                ]),
+            ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'sistema_gestao.wsgi.application'
+
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
@@ -92,18 +104,32 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'pt-br'
-TIME_ZONE = 'America/Sao_Paulo'
 USE_I18N = True
+LANGUAGE_CODE = 'pt-br'
+LANGUAGES = [
+    ('pt-br', 'Português (Brasil)'),
+    ('en', 'English'),
+]
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+    BASE_DIR / 'sistema_gestao' / 'locale',
+]
+TIME_ZONE = 'America/Sao_Paulo'
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+    BASE_DIR / "core" / "static",  # Static files from core app
+]
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Media files
+# Configuração do WhiteNoise
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files (Arquivos de Upload)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
@@ -112,18 +138,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    # Adicione aqui o domínio do seu frontend quando estiver em produção
-    # "https://seu-frontend.onrender.com",
+    "https://pi2-stock-system.vercel.app",
+    # Adicione outros domínios do frontend em produção aqui
 ]
 
-# Para desenvolvimento, permitir qualquer origem (remover em produção)
-if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-
+# Não permitir todas as origens em produção
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework Configuration
@@ -139,11 +159,46 @@ REST_FRAMEWORK = {
     ],
 }
 
+# django-q2 Configuration
+Q_CLUSTER = {
+    'name': 'stock_notifications_prod',
+    'workers': 1,
+    'timeout': 90,
+    'retry': 120,
+    'queue_limit': 50,
+    'bulk': 10,
+    'orm': 'default',
+}
+
+# Configuração de E-mail (Produção)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+
+# Lista de emails para receber notificações
+notification_emails_env = os.environ.get('NOTIFICATION_EMAILS', '')
+if notification_emails_env:
+    NOTIFICATION_EMAILS = [email.strip() for email in notification_emails_env.split(',') if email.strip()]
+else:
+    NOTIFICATION_EMAILS = []
+
+# Configurações VAPID para Push Notifications
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
+VAPID_CLAIMS = {
+    "sub": os.environ.get('VAPID_EMAIL', "mailto:admin@stockystem.com")
+}
+
 # Security settings for production
 if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'DENY'
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    SECURE_SSL_REDIRECT = False  # Render.com gerencia SSL, então False aqui
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True

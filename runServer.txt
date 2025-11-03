@@ -23,3 +23,8 @@ procurar INSTALLED_APPS e incluir 'NOMEDOAPP'
 SuperAdmin
 msbonfim01@gmail.com
 Corarte_2025
+
+
+
+venv
+.\venv\Scripts\activate

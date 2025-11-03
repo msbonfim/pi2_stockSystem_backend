@@ -1,0 +1,282 @@
+# core/tasks.py
+
+from django.core.mail import send_mail
+from django.utils import timezone
+from datetime import timedelta
+from .models import Product, Notification
+from .push_utils import send_push_notification, send_desktop_notification
+from django.conf import settings
+from django.contrib.auth.models import User
+import logging
+
+logger = logging.getLogger(__name__)
+
+def check_expiring_products_and_notify():
+    """
+    Busca produtos próximos da validade (7 dias para críticos, 30 dias para avisos)
+    e envia notificações por e-mail e push.
+    """
+    today = timezone.now().date()
+    
+    # Produtos críticos: 0-7 dias
+    critical_limit = today + timedelta(days=7)
+    critical_products = Product.objects.filter(
+        expiration_date__gte=today,
+        expiration_date__lte=critical_limit,
+        quantity__gt=0
+    ).order_by('expiration_date')
+    
+    # Produtos em aviso: 8-30 dias
+    warning_limit = today + timedelta(days=30)
+    warning_products = Product.objects.filter(
+        expiration_date__gt=critical_limit,
+        expiration_date__lte=warning_limit,
+        quantity__gt=0
+    ).order_by('expiration_date')
+    
+    results = []
+    
+    # Processa produtos críticos
+    if critical_products.exists():
+        result_critical = _send_notifications_for_products(
+            critical_products, 
+            "CRÍTICO", 
+            "produtos críticos próximos da validade",
+            today
+        )
+        results.append(result_critical)
+    
+    # Processa produtos em aviso (apenas se não houver críticos, para evitar spam)
+    if warning_products.exists() and not critical_products.exists():
+        result_warning = _send_notifications_for_products(
+            warning_products,
+            "AVISO",
+            "produtos próximos da validade",
+            today
+        )
+        results.append(result_warning)
+    
+    if not results:
+        logger.info("Nenhum produto próximo da validade encontrado.")
+        return "✅ Nenhum produto próximo da validade encontrado. Tudo em ordem!"
+    
+    return " | ".join(results)
+
+def _send_notifications_for_products(products, severity, description, today):
+    """Helper para enviar notificações de um grupo de produtos"""
+    count = products.count()
+    
+    # Prepara mensagens em português
+    if severity == "CRÍTICO":
+        title = f"⚠️ Alerta Crítico: {count} produto(s) próximo(s) da validade"
+        push_message = f"{count} produto(s) vence(m) nos próximos 7 dias! Ação urgente necessária."
+    else:
+        title = f"🔔 Aviso: {count} produto(s) próximo(s) da validade"
+        push_message = f"{count} produto(s) vence(m) nos próximos 30 dias."
+    
+    message_lines = [f"Os seguintes produtos estão próximos da data de validade ({severity}):\n"]
+    message_lines.append("=" * 60 + "\n")
+    
+    notifications_created = 0
+    
+    for product in products:
+        days_left = (product.expiration_date - today).days
+        product_msg = (
+            f"• {product.name}"
+            f"{f' - Marca: {product.brand.name}' if product.brand else ''}"
+            f"\n  Vence em: {days_left} dia(s) ({product.expiration_date.strftime('%d/%m/%Y')})"
+            f"\n  Quantidade em estoque: {product.quantity} unidade(s)\n"
+        )
+        message_lines.append(product_msg)
+        
+        # Cria notificação no banco para cada produto com mensagem em português
+        if days_left == 0:
+            notification_title = f"⚠️ {product.name} - Vence HOJE!"
+            notification_msg = f"ATENÇÃO! {product.name} vence hoje ({product.expiration_date.strftime('%d/%m/%Y')}). Ação imediata necessária!"
+        elif days_left <= 3:
+            notification_title = f"🚨 {product.name} - Vence em {days_left} dia(s)"
+            notification_msg = f"{product.name} vence em {days_left} dia(s) ({product.expiration_date.strftime('%d/%m/%Y')}). Quantidade: {product.quantity}."
+        else:
+            notification_title = f"📅 {product.name} - Vence em {days_left} dias"
+            notification_msg = f"{product.name} vence em {days_left} dias ({product.expiration_date.strftime('%d/%m/%Y')}). Quantidade: {product.quantity}."
+        
+        Notification.objects.create(
+            title=notification_title,
+            message=notification_msg,
+            notification_type='expiring_soon',
+            product=product
+        )
+        notifications_created += 1
+    
+    message = "\n".join(message_lines)
+    message += "\n" + "=" * 60
+    message += f"\n\nTotal de produtos: {count}"
+    message += f"\nTipo de alerta: {severity}"
+    message += f"\nData da verificação: {today.strftime('%d/%m/%Y')}\n"
+    
+    # Envia e-mail
+    email_result = _send_email_notification(title, message)
+    
+    # Envia push notifications
+    push_result = send_push_notification(
+        title=title,
+        message=push_message,
+        data={"type": "expiring_products", "count": count, "severity": severity.lower()}
+    )
+    
+    # Envia notificação desktop (Windows) - aparece no monitor
+    # Usa urgência crítica se for alerta crítico
+    urgency = 'critical' if severity == "CRÍTICO" else 'normal'
+    duration = 15 if severity == "CRÍTICO" else 10
+    
+    # Prepara mensagem resumida para desktop
+    desktop_message = push_message
+    if count > 5:
+        # Se houver muitos produtos, mostra apenas os primeiros na notificação desktop
+        first_products = products[:3]
+        product_names = ", ".join([p.name for p in first_products])
+        if count > 3:
+            desktop_message = f"{product_names} e mais {count - 3} produto(s). {push_message}"
+        else:
+            desktop_message = f"{product_names}. {push_message}"
+    
+    desktop_result = send_desktop_notification(
+        title=title,
+        message=desktop_message,
+        duration=duration,
+        urgency=urgency
+    )
+    
+    logger.info(
+        f"Notificações enviadas: {notifications_created} no banco, "
+        f"Email: {email_result}, Push: {push_result.get('sent', 0)} enviados, "
+        f"Desktop: {'✅' if desktop_result.get('sent') else '❌'}"
+    )
+    
+    desktop_status = "✅" if desktop_result.get('sent') else "❌"
+    return f"{severity}: {count} produto(s) - Email: {email_result}, Push: {push_result.get('sent', 0)} enviados, Desktop: {desktop_status}"
+
+def check_low_stock_and_notify(**kwargs):
+    """
+    Verifica produtos com estoque baixo (menos que min_quantity unidades)
+    e envia notificações por e-mail, push e desktop.
+    
+    Args:
+        min_quantity: Quantidade mínima para considerar estoque baixo (padrão: 2)
+                      Pode ser passado via kwargs do schedule
+    """
+    # Obtém min_quantity dos kwargs (pode vir do schedule) ou usa padrão
+    min_quantity = kwargs.get('min_quantity', 2)
+    # Busca produtos com quantidade menor que min_quantity
+    low_stock_products = Product.objects.filter(
+        quantity__gt=0,  # Apenas produtos com estoque > 0
+        quantity__lt=min_quantity
+    ).order_by('quantity', 'name')
+    
+    if not low_stock_products.exists():
+        logger.info(f"Nenhum produto com estoque baixo encontrado (menos de {min_quantity} unidades).")
+        return f"✅ Nenhum produto com estoque baixo encontrado. Tudo em ordem!"
+    
+    count = low_stock_products.count()
+    
+    # Prepara mensagens
+    title = f"📦 Alerta: {count} produto(s) com estoque baixo"
+    push_message = f"{count} produto(s) com menos de {min_quantity} unidade(s) em estoque!"
+    
+    message_lines = [f"Os seguintes produtos estão com estoque baixo (menos de {min_quantity} unidades):\n"]
+    message_lines.append("=" * 60 + "\n")
+    
+    notifications_created = 0
+    
+    for product in low_stock_products:
+        product_msg = (
+            f"• {product.name}"
+            f"{f' - Marca: {product.brand.name}' if product.brand else ''}"
+            f"\n  Quantidade atual: {product.quantity} unidade(s)"
+            f"\n  Preço: R$ {product.price:.2f}\n"
+        )
+        message_lines.append(product_msg)
+        
+        # Cria notificação no banco para cada produto
+        if product.quantity == 0:
+            notification_title = f"🔴 {product.name} - Estoque zerado!"
+            notification_msg = f"ATENÇÃO! {product.name} está com estoque zerado. É necessário repor urgentemente!"
+        elif product.quantity == 1:
+            notification_title = f"⚠️ {product.name} - Última unidade!"
+            notification_msg = f"{product.name} está com apenas 1 unidade em estoque. Reposição necessária!"
+        else:
+            notification_title = f"📦 {product.name} - Estoque baixo ({product.quantity} unidades)"
+            notification_msg = f"{product.name} está com apenas {product.quantity} unidade(s) em estoque. Considere repor."
+        
+        Notification.objects.create(
+            title=notification_title,
+            message=notification_msg,
+            notification_type='low_stock',
+            product=product
+        )
+        notifications_created += 1
+    
+    message = "\n".join(message_lines)
+    message += "\n" + "=" * 60
+    message += f"\n\nTotal de produtos com estoque baixo: {count}"
+    message += f"\nLimite configurado: menos de {min_quantity} unidades"
+    message += f"\nData da verificação: {timezone.now().date().strftime('%d/%m/%Y')}\n"
+    
+    # Envia e-mail
+    email_result = _send_email_notification(title, message)
+    
+    # Envia push notifications
+    push_result = send_push_notification(
+        title=title,
+        message=push_message,
+        data={"type": "low_stock", "count": count, "min_quantity": min_quantity}
+    )
+    
+    # Envia notificação desktop (Windows)
+    urgency = 'critical' if any(p.quantity == 0 for p in low_stock_products) else 'normal'
+    duration = 15 if any(p.quantity <= 1 for p in low_stock_products) else 10
+    
+    # Prepara mensagem resumida para desktop
+    desktop_message = push_message
+    if count > 5:
+        first_products = low_stock_products[:3]
+        product_names = ", ".join([p.name for p in first_products])
+        if count > 3:
+            desktop_message = f"{product_names} e mais {count - 3} produto(s). {push_message}"
+        else:
+            desktop_message = f"{product_names}. {push_message}"
+    
+    desktop_result = send_desktop_notification(
+        title=title,
+        message=desktop_message,
+        duration=duration,
+        urgency=urgency
+    )
+    
+    logger.info(
+        f"Notificações de estoque baixo enviadas: {notifications_created} no banco, "
+        f"Email: {email_result}, Push: {push_result.get('sent', 0)} enviados, "
+        f"Desktop: {'✅' if desktop_result.get('sent') else '❌'}"
+    )
+    
+    desktop_status = "✅" if desktop_result.get('sent') else "❌"
+    return f"Estoque Baixo: {count} produto(s) - Email: {email_result}, Push: {push_result.get('sent', 0)} enviados, Desktop: {desktop_status}"
+
+
+def _send_email_notification(subject, message):
+    """Helper para enviar e-mail de notificação"""
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@yourdomain.com')
+    recipient_list = getattr(settings, 'NOTIFICATION_EMAILS', ['admin@example.com'])
+    
+    # Se não houver emails configurados, retorna sem enviar
+    if not recipient_list or recipient_list == ['admin@example.com']:
+        logger.warning("NOTIFICATION_EMAILS não configurado. E-mail não enviado.")
+        return "Email não configurado"
+    
+    try:
+        send_mail(subject, message, from_email, recipient_list, fail_silently=False)
+        logger.info(f"E-mail de alerta enviado para {recipient_list}")
+        return f"Enviado para {len(recipient_list)} destinatário(s)"
+    except Exception as e:
+        logger.error(f"Falha ao enviar e-mail de alerta: {e}")
+        return f"Erro: {e}"

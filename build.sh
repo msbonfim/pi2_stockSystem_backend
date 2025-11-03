@@ -3,10 +3,11 @@
 set -o errexit
 
 # Instalar dependências
+pip install --upgrade pip
 pip install -r requirements.txt
 
 # Executar migrações
-python manage.py migrate
+python manage.py migrate --no-input
 
 # Coletar arquivos estáticos
 python manage.py collectstatic --no-input
