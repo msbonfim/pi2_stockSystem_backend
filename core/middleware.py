@@ -203,79 +203,15 @@ class AdminModernizationMiddleware(MiddlewareMixin):
             }
             </style>'''
             
-            # Script de injeção
-            injection_script = """
-<script type="text/javascript">
-(function() {
-    'use strict';
-    console.log('🎨 Injetando recursos modernos no Django Admin...');
-    
-    var timestamp = Date.now();
-    var base = '/static/admin/';
-    
-    function forceInjectCSS(path) {
-        var link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.type = 'text/css';
-        link.href = path + '?v=' + timestamp;
-        link.onerror = function() {
-            console.error('Erro ao carregar CSS:', path);
-        };
-        document.head.appendChild(link);
-        console.log('✓ CSS injetado:', path);
-    }
-    
-    function forceInjectJS(path, callback) {
-        var script = document.createElement('script');
-        script.src = path + '?v=' + timestamp;
-        script.onload = function() {
-            console.log('✓ JS carregado:', path);
-            if (callback) callback();
-        };
-        script.onerror = function() {
-            console.error('Erro ao carregar JS:', path);
-        };
-        document.body.appendChild(script);
-    }
-    
-    function initModernization() {
-        forceInjectCSS(base + 'css/admin_modern.css');
-        forceInjectCSS(base + 'css/accessibility.css');
-        
-        setTimeout(function() {
-            forceInjectJS(base + 'js/accessibility.js', function() {
-                console.log('✅ Todos os recursos carregados!');
-                if (typeof Accessibility !== 'undefined') {
-                    console.log('✅ Accessibility API disponível!');
-                }
-            });
-        }, 200);
-    }
-    
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initModernization);
-    } else {
-        initModernization();
-    }
-})();
-</script>
-"""
-            
             # Injeta CSS crítico no <head> se existir
+            # Os arquivos CSS/JS já são carregados pelo template base_site.html
+            # Não precisamos injetar scripts novamente aqui para evitar duplicação
             if '<head>' in content and '</head>' in content:
                 # Remove CSS crítico antigo se existir
                 import re
                 content = re.sub(r'<style id="admin-modern-critical">.*?</style>', '', content, flags=re.DOTALL)
                 # Injeta no início do head
                 content = content.replace('<head>', '<head>' + critical_css, 1)
-            
-            # Injeta script antes do </body>
-            if '</body>' in content:
-                content = content.replace('</body>', injection_script + '</body>')
-            elif '</html>' in content:
-                content = content.replace('</html>', injection_script + '</html>')
-            else:
-                content = content + injection_script
             
             try:
                 response.content = content.encode('utf-8') if isinstance(response.content, bytes) else content

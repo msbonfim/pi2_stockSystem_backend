@@ -558,10 +558,35 @@ body.admin-accessibility-xxlarge div {
     setTimeout(forceRemoveMargins, 100);
     setTimeout(forceRemoveMargins, 500);
     
-    // Observa mudanças no DOM - apenas se body existir
+    // Observa mudanças no DOM - com throttling para evitar loops infinitos
+    let observerTimeout = null;
+    let isProcessing = false;
+    
+    function throttledForceRemoveMargins() {
+        if (isProcessing) return;
+        isProcessing = true;
+        
+        if (observerTimeout) {
+            clearTimeout(observerTimeout);
+        }
+        
+        observerTimeout = setTimeout(function() {
+            forceRemoveMargins();
+            isProcessing = false;
+        }, 500); // Throttle de 500ms
+    }
+    
     if (window.MutationObserver && document.body) {
         const observer = new MutationObserver(function(mutations) {
-            forceRemoveMargins();
+            // Ignorar mutações que não afetam margens
+            const shouldProcess = mutations.some(function(mutation) {
+                return mutation.type === 'attributes' && 
+                       (mutation.attributeName === 'style' || mutation.attributeName === 'class');
+            });
+            
+            if (shouldProcess) {
+                throttledForceRemoveMargins();
+            }
         });
         observer.observe(document.body, {
             childList: true,
@@ -575,7 +600,14 @@ body.admin-accessibility-xxlarge div {
             document.addEventListener('DOMContentLoaded', function() {
                 if (document.body) {
                     const observer = new MutationObserver(function(mutations) {
-                        forceRemoveMargins();
+                        const shouldProcess = mutations.some(function(mutation) {
+                            return mutation.type === 'attributes' && 
+                                   (mutation.attributeName === 'style' || mutation.attributeName === 'class');
+                        });
+                        
+                        if (shouldProcess) {
+                            throttledForceRemoveMargins();
+                        }
                     });
                     observer.observe(document.body, {
                         childList: true,
@@ -641,11 +673,21 @@ header#header,
 // Garante que o Accessibility esteja disponível e funcione
 (function() {
   'use strict';
+  var accessibilityInitialized = false;
+  var loadingAttempts = 0;
+  var maxLoadingAttempts = 2; // Limitar tentativas de carregamento
+  
   function initAccessibility() {
+    // Evitar múltiplas inicializações
+    if (accessibilityInitialized) {
+      return;
+    }
+    
     console.log('🔧 Verificando Accessibility...');
     
     if (typeof Accessibility !== 'undefined') {
       console.log('✅ Accessibility API carregada!');
+      accessibilityInitialized = true;
       
       // Força criação do botão e painel se não existirem
       setTimeout(function() {
@@ -692,7 +734,15 @@ header#header,
         }
       }, 500);
     } else {
-      console.warn('⚠️ Accessibility API não encontrada, tentando recarregar...');
+      // Limitar tentativas de carregamento para evitar loops
+      if (loadingAttempts >= maxLoadingAttempts) {
+        console.warn('⚠️ Limite de tentativas de carregamento atingido. Accessibility pode não estar disponível.');
+        return;
+      }
+      
+      loadingAttempts++;
+      console.warn('⚠️ Accessibility API não encontrada, tentando recarregar... (' + loadingAttempts + '/' + maxLoadingAttempts + ')');
+      
       var script = document.createElement('script');
       script.src = "{% static 'admin/js/accessibility.js' %}?v=" + Date.now();
       script.onload = function() {
@@ -701,13 +751,28 @@ header#header,
       };
       script.onerror = function() {
         console.error('✗ Erro ao carregar accessibility.js');
+        accessibilityInitialized = true; // Marcar como inicializado para parar tentativas
       };
-      document.body.appendChild(script);
+      
+      if (document.body) {
+        document.body.appendChild(script);
+      } else {
+        // Se body ainda não existe, aguardar
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function() {
+            if (document.body) {
+              document.body.appendChild(script);
+            }
+          });
+        }
+      }
     }
   }
   
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAccessibility);
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(initAccessibility, 200);
+    });
   } else {
     setTimeout(initAccessibility, 200);
   }
@@ -814,22 +879,8 @@ header#header,
     }
   }, false); // Mudado de true para false - não usar capture phase
   
-  // Executar periodicamente para garantir que não apareçam bordas
-  // MAS apenas para elementos que não sejam selects, inputs (incluindo checkbox), textareas ou checkboxes
-  setInterval(function() {
-    // Verificar se não há um select, input (qualquer tipo), textarea ou checkbox com foco antes de remover bordas
-    const activeEl = document.activeElement;
-    if (activeEl && 
-        activeEl.tagName !== 'SELECT' && 
-        activeEl.tagName !== 'INPUT' && 
-        activeEl.tagName !== 'TEXTAREA' &&
-        activeEl.tagName !== 'OPTION' &&
-        activeEl.type !== 'checkbox' &&
-        !activeEl.classList.contains('action-select') &&
-        !activeEl.closest('select, input, textarea, .actions')) {
-      removeFocusBorders();
-    }
-  }, 100);
+  // Remover setInterval - executa apenas quando necessário (eventos)
+  // O setInterval foi removido para evitar loops infinitos e melhorar performance
   
   // Executar imediatamente
   if (document.readyState === 'loading') {
