@@ -264,7 +264,7 @@ def check_low_stock_and_notify(**kwargs):
 
 
 def _send_email_notification(subject, message):
-    """Helper para enviar e-mail de notificação"""
+    """Helper para enviar e-mail de notificação com timeout"""
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@yourdomain.com')
     recipient_list = getattr(settings, 'NOTIFICATION_EMAILS', ['admin@example.com'])
     
@@ -274,9 +274,13 @@ def _send_email_notification(subject, message):
         return "Email não configurado"
     
     try:
+        # Usa send_mail com timeout configurado em settings (EMAIL_TIMEOUT)
+        # O Django já aplica o timeout automaticamente se EMAIL_TIMEOUT estiver configurado
         send_mail(subject, message, from_email, recipient_list, fail_silently=False)
         logger.info(f"E-mail de alerta enviado para {recipient_list}")
         return f"Enviado para {len(recipient_list)} destinatário(s)"
     except Exception as e:
         logger.error(f"Falha ao enviar e-mail de alerta: {e}")
-        return f"Erro: {e}"
+        # Retorna mensagem de erro mas não quebra a task
+        # A task continua e pode enviar push notifications mesmo se email falhar
+        return f"Erro ao enviar email: {str(e)[:100]}"

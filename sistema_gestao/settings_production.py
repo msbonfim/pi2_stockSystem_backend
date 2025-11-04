@@ -171,7 +171,7 @@ REST_FRAMEWORK = {
 Q_CLUSTER = {
     'name': 'stock_notifications_prod',
     'workers': 1,
-    'timeout': 90,
+    'timeout': 180,  # Aumentado para 180s (3 minutos) para dar tempo ao envio de email
     'retry': 120,
     'queue_limit': 50,
     'bulk': 10,
@@ -186,6 +186,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+EMAIL_TIMEOUT = 10  # Timeout de 10 segundos para conexão SMTP
 
 # Lista de emails para receber notificações
 notification_emails_env = os.environ.get('NOTIFICATION_EMAILS', '')

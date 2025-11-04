@@ -199,7 +199,7 @@ REST_FRAMEWORK = {
 Q_CLUSTER = {
     'name': 'stock_notifications',
     'workers': 1,  # Número de processos que rodam as tarefas
-    'timeout': 90, # Tempo máximo (segundos) que uma tarefa pode rodar
+    'timeout': 180, # Tempo máximo (segundos) que uma tarefa pode rodar (aumentado para 180s)
     'retry': 120,  # Tempo (segundos) para tentar novamente se falhar
     'queue_limit': 50,
     'bulk': 10,
