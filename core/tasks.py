@@ -16,6 +16,9 @@ def check_expiring_products_and_notify():
     Busca produtos próximos da validade (7 dias para críticos, 30 dias para avisos)
     e envia notificações por e-mail e push.
     """
+    logger.info("=" * 60)
+    logger.info("🔔 EXECUTANDO: check_expiring_products_and_notify")
+    logger.info("=" * 60)
     today = timezone.now().date()
     
     # Produtos críticos: 0-7 dias
@@ -118,11 +121,13 @@ def _send_notifications_for_products(products, severity, description, today):
     email_result = _send_email_notification(title, message)
     
     # Envia push notifications
+    logger.info(f"📤 Chamando send_push_notification para produtos próximos da validade...")
     push_result = send_push_notification(
         title=title,
         message=push_message,
         data={"type": "expiring_products", "count": count, "severity": severity.lower()}
     )
+    logger.info(f"📤 Resultado do push: {push_result}")
     
     # Envia notificação desktop (Windows) - aparece no monitor
     # Usa urgência crítica se for alerta crítico
@@ -165,8 +170,12 @@ def check_low_stock_and_notify(**kwargs):
         min_quantity: Quantidade mínima para considerar estoque baixo (padrão: 2)
                       Pode ser passado via kwargs do schedule
     """
+    logger.info("=" * 60)
+    logger.info("🔔 EXECUTANDO: check_low_stock_and_notify")
+    logger.info("=" * 60)
     # Obtém min_quantity dos kwargs (pode vir do schedule) ou usa padrão
     min_quantity = kwargs.get('min_quantity', 2)
+    logger.info(f"📊 Min quantity: {min_quantity}")
     # Busca produtos com quantidade menor que min_quantity
     low_stock_products = Product.objects.filter(
         quantity__gt=0,  # Apenas produtos com estoque > 0
@@ -226,11 +235,13 @@ def check_low_stock_and_notify(**kwargs):
     email_result = _send_email_notification(title, message)
     
     # Envia push notifications
+    logger.info(f"📤 Chamando send_push_notification para estoque baixo...")
     push_result = send_push_notification(
         title=title,
         message=push_message,
         data={"type": "low_stock", "count": count, "min_quantity": min_quantity}
     )
+    logger.info(f"📤 Resultado do push: {push_result}")
     
     # Envia notificação desktop (Windows)
     urgency = 'critical' if any(p.quantity == 0 for p in low_stock_products) else 'normal'
@@ -280,7 +291,14 @@ def _send_email_notification(subject, message):
         logger.info(f"E-mail de alerta enviado para {recipient_list}")
         return f"Enviado para {len(recipient_list)} destinatário(s)"
     except Exception as e:
-        logger.error(f"Falha ao enviar e-mail de alerta: {e}")
+        error_msg = str(e)
+        logger.error(f"Falha ao enviar e-mail de alerta: {error_msg}")
+        
+        # Log específico para erros de rede
+        if "Network is unreachable" in error_msg or "Errno 101" in error_msg:
+            logger.warning("Rede não acessível - Render.com pode estar bloqueando conexões SMTP")
+            logger.warning("Verifique configurações de firewall ou use serviço de email alternativo")
+        
         # Retorna mensagem de erro mas não quebra a task
         # A task continua e pode enviar push notifications mesmo se email falhar
-        return f"Erro ao enviar email: {str(e)[:100]}"
+        return f"Erro ao enviar email: {error_msg[:100]}"

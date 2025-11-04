@@ -37,28 +37,42 @@ def send_push_notification(title, message, data=None, user=None):
         data: Dados adicionais (dict)
         user: Usuário específico (opcional, se None, envia para todos)
     """
+    logger.info("=" * 60)
+    logger.info(f"🚀 INICIANDO ENVIO DE PUSH NOTIFICATION")
+    logger.info(f"📝 Título: {title}")
+    logger.info(f"📝 Mensagem: {message}")
+    logger.info("=" * 60)
+    
     subscriptions = PushSubscription.objects.filter(active=True)
+    subscription_count = subscriptions.count()
+    logger.info(f"🔍 Subscriptions ativas encontradas: {subscription_count}")
+    
     if not subscriptions.exists():
-        logger.info("Nenhuma subscription ativa encontrada para envio de push notification")
+        logger.info("❌ Nenhuma subscription ativa encontrada para envio de push notification")
         return {"sent": 0, "failed": 0}
     
     if not VAPID_AVAILABLE:
-        logger.error("py-vapid não está instalado. Não é possível enviar push notifications.")
+        logger.error("❌ py-vapid não está instalado. Não é possível enviar push notifications.")
         return {"sent": 0, "failed": subscriptions.count(), "error": "py-vapid não instalado"}
 
     vapid_private_key = getattr(settings, 'VAPID_PRIVATE_KEY', None)
     vapid_claims_email = getattr(settings, 'VAPID_CLAIMS', {}).get("sub", "mailto:admin@example.com")
+    
+    logger.info(f"🔑 VAPID_PRIVATE_KEY configurada: {'Sim' if vapid_private_key else 'Não'}")
+    logger.info(f"📧 VAPID_EMAIL: {vapid_claims_email}")
 
     # Inicializa o objeto Vapid
+    logger.info("🔧 Inicializando objeto Vapid...")
     try:
         vapid = Vapid.from_pem(vapid_private_key.encode('utf-8'))
+        logger.info("✅ Objeto Vapid inicializado com sucesso")
     except Exception as e:
-        logger.error(f"Falha crítica ao carregar a VAPID_PRIVATE_KEY: {e}")
+        logger.error(f"❌ Falha crítica ao carregar a VAPID_PRIVATE_KEY: {e}")
         return {"sent": 0, "failed": subscriptions.count(), "error": f"Chave VAPID inválida: {e}"}
 
     if not vapid_private_key or 'placeholder' in vapid_private_key or not vapid_private_key.strip().startswith('-----BEGIN'):
         error_message = "VAPID_PRIVATE_KEY não está configurada corretamente em settings.py. Deve ser uma string PEM."
-        logger.error(error_message)
+        logger.error(f"❌ {error_message}")
         return {"sent": 0, "failed": subscriptions.count(), "error": error_message}
 
     sent = 0
@@ -70,8 +84,12 @@ def send_push_notification(title, message, data=None, user=None):
         "badge": "/pwa-64x64.png",
         "data": data or {}
     }
+    
+    logger.info(f"📦 Payload criado: título='{title}', mensagem='{message[:50]}...'")
+    logger.info(f"🔄 Iniciando loop para {subscription_count} subscription(s)")
 
-    for subscription in subscriptions:
+    for idx, subscription in enumerate(subscriptions, 1):
+        logger.info(f"📤 [{idx}/{subscription_count}] Processando subscription {subscription.id}...")
         subscription_info = {
             "endpoint": subscription.endpoint,
             "keys": {
@@ -90,11 +108,18 @@ def send_push_notification(title, message, data=None, user=None):
                 "sub": vapid_claims_email,
                 "aud": audience
             }
+            
+            # Log para debug (usando INFO para garantir que apareça)
+            logger.info(f"🔔 Enviando push para {subscription.endpoint[:50]}...")
+            logger.info(f"📍 Audience: {audience}")
+            logger.info(f"📧 VAPID Email (sub): {vapid_claims_email}")
+            
             vapid_headers = vapid.sign(claims, subscription_info["endpoint"])
             # Adiciona o cabeçalho TTL (Time-To-Live) manualmente, que é obrigatório.
             vapid_headers['TTL'] = '43200'  # 12 horas
-
-            logger.debug(f"Enviando push para {subscription.endpoint[:50]}...")
+            
+            # Log dos headers (sem valores sensíveis)
+            logger.info(f"📋 Headers VAPID gerados: {list(vapid_headers.keys())}")
             
             # Envia a requisição usando a biblioteca 'requests'
             response = requests.post(
@@ -107,15 +132,52 @@ def send_push_notification(title, message, data=None, user=None):
             response.raise_for_status()  # Lança um erro para status 4xx ou 5xx
             
             sent += 1
-            logger.info(f"Push notification enviada com sucesso para {subscription.endpoint[:50]}...")
+            logger.info(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso!")
+            logger.info(f"   Status: {response.status_code}")
+            logger.info(f"   Endpoint: {subscription.endpoint[:50]}...")
 
         except requests.exceptions.RequestException as e:
             failed += 1
-            logger.error(f"Erro de requisição ao enviar push notification: {e}")
-            if e.response and e.response.status_code in [404, 410]:
-                subscription.active = False
-                subscription.save()
-                logger.info(f"Subscription desativada pois não existe mais (status {e.response.status_code})")
+            error_msg = str(e)
+            
+            logger.error(f"❌ [{idx}/{subscription_count}] Erro ao enviar push notification")
+            logger.error(f"   Endpoint: {subscription.endpoint[:100]}")
+            
+            # Log detalhado do erro
+            if e.response:
+                status_code = e.response.status_code
+                logger.error(f"   Status Code: {status_code}")
+                logger.error(f"   Erro: {error_msg}")
+                
+                # Tenta ler resposta do erro
+                try:
+                    error_response = e.response.text[:200]
+                    logger.error(f"   Resposta do servidor: {error_response}")
+                except:
+                    pass
+                
+                # 403 Forbidden geralmente indica chave VAPID incorreta ou subscription inválida
+                if status_code == 403:
+                    logger.error(f"   ⚠️ 403 Forbidden - Possíveis causas:")
+                    logger.error(f"      - Chave VAPID privada não corresponde à pública")
+                    logger.error(f"      - Subscription foi criada com chave diferente")
+                    logger.error(f"      - VAPID_EMAIL incorreto")
+                    logger.error(f"   Endpoint completo: {subscription.endpoint[:150]}")
+                    # Desativa subscription com 403 também, pois indica que está inválida
+                    subscription.active = False
+                    subscription.save()
+                    logger.info(f"   🔄 Subscription {subscription.id} desativada devido a 403 Forbidden")
+                # 404 ou 410 = subscription não existe mais
+                elif status_code in [404, 410]:
+                    subscription.active = False
+                    subscription.save()
+                    logger.info(f"   🔄 Subscription {subscription.id} desativada pois não existe mais (status {status_code})")
+            else:
+                logger.error(f"   Erro de requisição (sem resposta): {error_msg}")
+    
+    logger.info("=" * 60)
+    logger.info(f"📊 RESULTADO FINAL: {sent} enviada(s), {failed} falha(s)")
+    logger.info("=" * 60)
     
     return {"sent": sent, "failed": failed}
 
