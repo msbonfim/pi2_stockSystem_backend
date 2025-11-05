@@ -213,13 +213,19 @@ def send_push_notification(title, message, data=None, user=None):
             logger.info(f"🔐 Preparando envio com pywebpush")
             logger.info(f"🔍 Chave que será usada (tamanho: {len(vapid_private_key)})")
             
-            # pywebpush espera string PEM ou bytes, não objeto Vapid
-            # Vamos usar a string PEM normalizada
+            # pywebpush pode aceitar string PEM, bytes, ou objeto Vapid
+            # Vamos usar o objeto Vapid que já validamos, pois é mais confiável
+            # O objeto Vapid já foi criado na validação acima (test_vapid)
+            print(f"🔐 Usando objeto Vapid validado (mais confiável que string)", file=sys.stdout, flush=True)
+            logger.info(f"🔐 Usando objeto Vapid validado")
+            
             try:
+                # Usa o objeto Vapid ao invés da string PEM
+                # Isso garante que a chave está no formato correto
                 response = webpush(
                     subscription_info=subscription_info,
                     data=json.dumps(payload),
-                    vapid_private_key=vapid_private_key,  # Usa string PEM
+                    vapid_private_key=test_vapid,  # Usa objeto Vapid (já validado)
                     vapid_claims={
                         "sub": vapid_claims_email,
                         "aud": audience
@@ -229,11 +235,29 @@ def send_push_notification(title, message, data=None, user=None):
             except Exception as webpush_error:
                 # Log detalhado do erro do pywebpush
                 print(f"❌ ERRO NO WEBPUSH: {type(webpush_error).__name__}: {webpush_error}", file=sys.stdout, flush=True)
-                print(f"🔍 DEBUG - Chave usada (últimos 100 chars): {repr(vapid_private_key[-100:])}", file=sys.stdout, flush=True)
-                print(f"🔍 DEBUG - Chave tem \\n: {'Sim' if '\\n' in vapid_private_key else 'Não'}", file=sys.stdout, flush=True)
-                print(f"🔍 DEBUG - Chave tem \\r: {'Sim' if '\\r' in vapid_private_key else 'Não'}", file=sys.stdout, flush=True)
-                logger.error(f"❌ ERRO NO WEBPUSH: {type(webpush_error).__name__}: {webpush_error}")
-                raise  # Re-lança o erro para ser capturado pelo except externo
+                print(f"🔍 DEBUG - Tentando com string PEM ao invés de objeto Vapid...", file=sys.stdout, flush=True)
+                logger.error(f"❌ ERRO NO WEBPUSH com objeto Vapid: {type(webpush_error).__name__}: {webpush_error}")
+                
+                # Fallback: tenta com string PEM (mas garante que tem quebras de linha)
+                try:
+                    # Garante que a string tem quebras de linha literais
+                    vapid_key_bytes = vapid_private_key.encode('utf-8')
+                    print(f"🔍 Tentando com bytes (tamanho: {len(vapid_key_bytes)})", file=sys.stdout, flush=True)
+                    response = webpush(
+                        subscription_info=subscription_info,
+                        data=json.dumps(payload),
+                        vapid_private_key=vapid_key_bytes,  # Tenta com bytes
+                        vapid_claims={
+                            "sub": vapid_claims_email,
+                            "aud": audience
+                        },
+                        ttl=43200
+                    )
+                    print(f"✅ Funcionou com bytes!", file=sys.stdout, flush=True)
+                except Exception as webpush_error2:
+                    print(f"❌ Também falhou com bytes: {webpush_error2}", file=sys.stdout, flush=True)
+                    logger.error(f"❌ ERRO NO WEBPUSH com bytes: {webpush_error2}")
+                    raise webpush_error2  # Re-lança o erro para ser capturado pelo except externo
             
             sent += 1
             print(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso! Status: {response.status_code if hasattr(response, 'status_code') else 'OK'}", file=sys.stdout, flush=True)
