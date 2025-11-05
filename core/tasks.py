@@ -16,9 +16,10 @@ def check_expiring_products_and_notify():
     Busca produtos próximos da validade (7 dias para críticos, 30 dias para avisos)
     e envia notificações por e-mail e push.
     """
-    print("\n" + "="*70)
-    print("🔔 EXECUTANDO: check_expiring_products_and_notify")
-    print("="*70)
+    import sys
+    print("\n" + "="*70, file=sys.stdout, flush=True)
+    print("🔔 EXECUTANDO: check_expiring_products_and_notify", file=sys.stdout, flush=True)
+    print("="*70, file=sys.stdout, flush=True)
     logger.info("=" * 60)
     logger.info("🔔 EXECUTANDO: check_expiring_products_and_notify")
     logger.info("=" * 60)
@@ -124,16 +125,17 @@ def _send_notifications_for_products(products, severity, description, today):
     email_result = _send_email_notification(title, message)
     
     # Envia push notifications
-    print(f"\n{'='*70}")
-    print(f"🚀 ENVIANDO PUSH NOTIFICATION - Produtos Próximos da Validade")
-    print(f"{'='*70}")
+    import sys
+    print(f"\n{'='*70}", file=sys.stdout, flush=True)
+    print(f"🚀 ENVIANDO PUSH NOTIFICATION - Produtos Próximos da Validade", file=sys.stdout, flush=True)
+    print(f"{'='*70}", file=sys.stdout, flush=True)
     logger.info(f"📤 Chamando send_push_notification para produtos próximos da validade...")
     push_result = send_push_notification(
         title=title,
         message=push_message,
         data={"type": "expiring_products", "count": count, "severity": severity.lower()}
     )
-    print(f"✅ Push resultado: {push_result}")
+    print(f"✅ Push resultado: {push_result}", file=sys.stdout, flush=True)
     logger.info(f"📤 Resultado do push: {push_result}")
     
     # Envia notificação desktop (Windows) - aparece no monitor
@@ -177,15 +179,16 @@ def check_low_stock_and_notify(**kwargs):
         min_quantity: Quantidade mínima para considerar estoque baixo (padrão: 2)
                       Pode ser passado via kwargs do schedule
     """
-    print("\n" + "="*70)
-    print("🔔 EXECUTANDO: check_low_stock_and_notify")
-    print("="*70)
+    import sys
+    print("\n" + "="*70, file=sys.stdout, flush=True)
+    print("🔔 EXECUTANDO: check_low_stock_and_notify", file=sys.stdout, flush=True)
+    print("="*70, file=sys.stdout, flush=True)
     logger.info("=" * 60)
     logger.info("🔔 EXECUTANDO: check_low_stock_and_notify")
     logger.info("=" * 60)
     # Obtém min_quantity dos kwargs (pode vir do schedule) ou usa padrão
     min_quantity = kwargs.get('min_quantity', 2)
-    print(f"📊 Min quantity: {min_quantity}")
+    print(f"📊 Min quantity: {min_quantity}", file=sys.stdout, flush=True)
     logger.info(f"📊 Min quantity: {min_quantity}")
     # Busca produtos com quantidade menor que min_quantity
     low_stock_products = Product.objects.filter(
@@ -248,16 +251,17 @@ def check_low_stock_and_notify(**kwargs):
     email_result = _send_email_notification(title, message)
     
     # Envia push notifications
-    print(f"\n{'='*70}")
-    print(f"🚀 ENVIANDO PUSH NOTIFICATION - Estoque Baixo")
-    print(f"{'='*70}")
+    import sys
+    print(f"\n{'='*70}", file=sys.stdout, flush=True)
+    print(f"🚀 ENVIANDO PUSH NOTIFICATION - Estoque Baixo", file=sys.stdout, flush=True)
+    print(f"{'='*70}", file=sys.stdout, flush=True)
     logger.info(f"📤 Chamando send_push_notification para estoque baixo...")
     push_result = send_push_notification(
         title=title,
         message=push_message,
         data={"type": "low_stock", "count": count, "min_quantity": min_quantity}
     )
-    print(f"✅ Push resultado: {push_result}")
+    print(f"✅ Push resultado: {push_result}", file=sys.stdout, flush=True)
     logger.info(f"📤 Resultado do push: {push_result}")
     
     # Envia notificação desktop (Windows)

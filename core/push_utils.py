@@ -10,13 +10,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Tenta importar a biblioteca VAPID
+# Tenta importar as bibliotecas necessárias
 VAPID_AVAILABLE = False
+WEBPUSH_AVAILABLE = False
 try:
     from py_vapid import Vapid
     VAPID_AVAILABLE = True
 except ImportError:
     logger.warning("Biblioteca 'py-vapid' não encontrada. Push notifications não funcionarão.")
+
+try:
+    from pywebpush import webpush
+    WEBPUSH_AVAILABLE = True
+except ImportError:
+    logger.warning("Biblioteca 'pywebpush' não encontrada. Push notifications não funcionarão.")
 
 # Tenta importar bibliotecas para notificações desktop
 DESKTOP_NOTIFICATIONS_AVAILABLE = False
@@ -38,11 +45,12 @@ def send_push_notification(title, message, data=None, user=None):
         user: Usuário específico (opcional, se None, envia para todos)
     """
     # Logs FORÇADOS com print() para aparecer sempre
-    print("\n" + "="*70)
-    print(f"🚀 INICIANDO ENVIO DE PUSH NOTIFICATION")
-    print(f"📝 Título: {title}")
-    print(f"📝 Mensagem: {message}")
-    print("="*70)
+    import sys
+    print("\n" + "="*70, file=sys.stdout, flush=True)
+    print(f"🚀 INICIANDO ENVIO DE PUSH NOTIFICATION", file=sys.stdout, flush=True)
+    print(f"📝 Título: {title}", file=sys.stdout, flush=True)
+    print(f"📝 Mensagem: {message}", file=sys.stdout, flush=True)
+    print("="*70, file=sys.stdout, flush=True)
     
     logger.info("=" * 60)
     logger.info(f"🚀 INICIANDO ENVIO DE PUSH NOTIFICATION")
@@ -54,23 +62,31 @@ def send_push_notification(title, message, data=None, user=None):
     subscription_count = subscriptions.count()
     
     # Logs sempre visíveis, mesmo sem subscriptions
-    print(f"\n{'='*70}")
-    print(f"🔔 PUSH NOTIFICATION: {title}")
-    print(f"{'='*70}")
-    print(f"📊 Subscriptions ativas: {subscription_count}")
+    import sys
+    print(f"\n{'='*70}", file=sys.stdout, flush=True)
+    print(f"🔔 PUSH NOTIFICATION: {title}", file=sys.stdout, flush=True)
+    print(f"{'='*70}", file=sys.stdout, flush=True)
+    print(f"📊 Subscriptions ativas: {subscription_count}", file=sys.stdout, flush=True)
     logger.info(f"🔍 Subscriptions ativas encontradas: {subscription_count}")
     
     if not subscriptions.exists():
+        import sys
         msg = "❌ Nenhuma subscription ativa encontrada para envio de push notification"
-        print(msg)
+        print(msg, file=sys.stdout, flush=True)
         logger.warning(msg)
-        print("💡 SOLUÇÃO: No navegador, limpe Service Worker e permita notificações novamente")
-        print(f"{'='*70}\n")
+        print("💡 SOLUÇÃO: No navegador, limpe Service Worker e permita notificações novamente", file=sys.stdout, flush=True)
+        print(f"{'='*70}\n", file=sys.stdout, flush=True)
         return {"sent": 0, "failed": 0}
     
-    if not VAPID_AVAILABLE:
-        logger.error("❌ py-vapid não está instalado. Não é possível enviar push notifications.")
-        return {"sent": 0, "failed": subscriptions.count(), "error": "py-vapid não instalado"}
+    if not VAPID_AVAILABLE or not WEBPUSH_AVAILABLE:
+        import sys
+        error_msg = "❌ Bibliotecas necessárias não instaladas. py-vapid: {}, pywebpush: {}".format(
+            "OK" if VAPID_AVAILABLE else "FALTANDO",
+            "OK" if WEBPUSH_AVAILABLE else "FALTANDO"
+        )
+        print(error_msg, file=sys.stdout, flush=True)
+        logger.error(error_msg)
+        return {"sent": 0, "failed": subscriptions.count(), "error": "Bibliotecas não instaladas"}
 
     vapid_private_key = getattr(settings, 'VAPID_PRIVATE_KEY', None)
     vapid_claims_email = getattr(settings, 'VAPID_CLAIMS', {}).get("sub", "mailto:admin@example.com")
@@ -94,19 +110,27 @@ def send_push_notification(title, message, data=None, user=None):
 
     sent = 0
     failed = 0
+    
+    # Payload que será enviado (será criptografado pelo pywebpush)
     payload = {
         "title": title,
-        "body": message,
-        "icon": "/pwa-192x192.png",  # Ícone da notificação
+        "message": message,  # Service Worker procura por 'message' ou 'body'
+        "body": message,     # Também inclui 'body' para compatibilidade
+        "icon": "/pwa-192x192.png",
         "badge": "/pwa-64x64.png",
         "data": data or {}
     }
     
+    import sys
+    print(f"📦 Payload criado: título='{title}', mensagem='{message[:50]}...'", file=sys.stdout, flush=True)
     logger.info(f"📦 Payload criado: título='{title}', mensagem='{message[:50]}...'")
     logger.info(f"🔄 Iniciando loop para {subscription_count} subscription(s)")
 
     for idx, subscription in enumerate(subscriptions, 1):
+        import sys
+        print(f"📤 [{idx}/{subscription_count}] Processando subscription {subscription.id}...", file=sys.stdout, flush=True)
         logger.info(f"📤 [{idx}/{subscription_count}] Processando subscription {subscription.id}...")
+        
         subscription_info = {
             "endpoint": subscription.endpoint,
             "keys": {
@@ -116,57 +140,37 @@ def send_push_notification(title, message, data=None, user=None):
         }
 
         try:
-            # Gera os cabeçalhos VAPID para cada requisição
-            # O método correto na biblioteca py_vapid é sign().
-            # Ele espera um dicionário de claims que contenha 'sub' e 'aud'.
-            parsed_url = urlparse(subscription_info["endpoint"])
-            audience = f"{parsed_url.scheme}://{parsed_url.netloc}"
-            claims = {
-                "sub": vapid_claims_email,
-                "aud": audience
-            }
-            
-            # Log para debug (usando INFO para garantir que apareça)
+            # Usa pywebpush para enviar (ele criptografa o payload automaticamente)
+            # pywebpush precisa do VAPID_PRIVATE_KEY e VAPID_CLAIMS
+            print(f"🔔 Enviando push para {subscription.endpoint[:50]}...", file=sys.stdout, flush=True)
             logger.info(f"🔔 Enviando push para {subscription.endpoint[:50]}...")
-            logger.info(f"📍 Audience: {audience}")
-            logger.info(f"📧 VAPID Email (sub): {vapid_claims_email}")
             
-            vapid_headers = vapid.sign(claims, subscription_info["endpoint"])
-            # Adiciona o cabeçalho TTL (Time-To-Live) manualmente, que é obrigatório.
-            vapid_headers['TTL'] = '43200'  # 12 horas
+            # pywebpush.webpush() faz tudo: criptografia + headers VAPID + envio
+            parsed_url = urlparse(subscription.endpoint)
+            audience = f"{parsed_url.scheme}://{parsed_url.netloc}"
             
-            # Log dos headers (sem valores sensíveis)
-            logger.info(f"📋 Headers VAPID gerados: {list(vapid_headers.keys())}")
-            
-            # Envia a requisição usando a biblioteca 'requests'
-            # IMPORTANTE: Web Push API requer Content-Type: application/json
-            headers = dict(vapid_headers)
-            headers['Content-Type'] = 'application/json'
-            
-            print(f"📤 Enviando payload: {json.dumps(payload, indent=2)}")
-            logger.info(f"📤 Payload: {json.dumps(payload)}")
-            logger.info(f"📋 Headers: {list(headers.keys())}")
-            
-            response = requests.post(
-                subscription_info["endpoint"],
-                headers=headers,
+            response = webpush(
+                subscription_info=subscription_info,
                 data=json.dumps(payload),
-                timeout=10
+                vapid_private_key=vapid_private_key,
+                vapid_claims={
+                    "sub": vapid_claims_email,
+                    "aud": audience
+                }
             )
             
-            response.raise_for_status()  # Lança um erro para status 4xx ou 5xx
-            
             sent += 1
-            print(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso! Status: {response.status_code}")
+            print(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso! Status: {response.status_code if hasattr(response, 'status_code') else 'OK'}", file=sys.stdout, flush=True)
             logger.info(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso!")
-            logger.info(f"   Status: {response.status_code}")
             logger.info(f"   Endpoint: {subscription.endpoint[:50]}...")
 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             failed += 1
             error_msg = str(e)
-            
+            import sys
+            print(f"❌ [{idx}/{subscription_count}] Erro: {error_msg}", file=sys.stdout, flush=True)
             logger.error(f"❌ [{idx}/{subscription_count}] Erro ao enviar push notification")
+            logger.error(f"   Erro completo: {error_msg}")
             logger.error(f"   Endpoint: {subscription.endpoint[:100]}")
             
             # Log detalhado do erro
@@ -212,9 +216,10 @@ def send_push_notification(title, message, data=None, user=None):
                     logger.warning(f"   💡 Execute: python manage.py fix_push_notifications para diagnosticar")
     
     # Logs finais sempre visíveis
-    print(f"\n{'='*70}")
-    print(f"📊 RESULTADO: {sent} enviada(s), {failed} falha(s)")
-    print(f"{'='*70}\n")
+    import sys
+    print(f"\n{'='*70}", file=sys.stdout, flush=True)
+    print(f"📊 RESULTADO: {sent} enviada(s), {failed} falha(s)", file=sys.stdout, flush=True)
+    print(f"{'='*70}\n", file=sys.stdout, flush=True)
     logger.info("=" * 60)
     logger.info(f"📊 RESULTADO FINAL: {sent} enviada(s), {failed} falha(s)")
     logger.info("=" * 60)

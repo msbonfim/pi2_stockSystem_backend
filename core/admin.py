@@ -113,6 +113,7 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
     def test_push_notification(self, request, queryset):
         """Testa envio de push notification"""
         from .push_utils import send_push_notification
+        import sys
         
         total = queryset.count()
         active = queryset.filter(active=True).count()
@@ -120,6 +121,11 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
         if active == 0:
             self.message_user(request, f"❌ Nenhuma subscription ativa selecionada. Total: {total}", level='ERROR')
             return
+        
+        # Força output para stdout/stderr aparecer nos logs
+        print("\n" + "="*70, file=sys.stdout)
+        print("🧪 TESTE DE PUSH NOTIFICATION DO DJANGO ADMIN", file=sys.stdout)
+        print("="*70, file=sys.stdout, flush=True)
         
         result = send_push_notification(
             title="🧪 Teste de Notificação",
@@ -129,11 +135,18 @@ class PushSubscriptionAdmin(admin.ModelAdmin):
         
         sent = result.get('sent', 0)
         failed = result.get('failed', 0)
+        error = result.get('error')
+        
+        print(f"RESULTADO: sent={sent}, failed={failed}, error={error}", file=sys.stdout, flush=True)
+        print("="*70 + "\n", file=sys.stdout, flush=True)
         
         if sent > 0:
-            self.message_user(request, f"✅ {sent} notificação(s) enviada(s) com sucesso! {failed} falha(s).", level='SUCCESS')
+            msg = f"✅ {sent} notificação(s) enviada(s) com sucesso! {failed} falha(s)."
+            self.message_user(request, msg, level='SUCCESS')
         else:
-            self.message_user(request, f"❌ Falha ao enviar. {failed} erro(s). Verifique os logs do Render.com.", level='ERROR')
+            error_msg = f"Erro: {error}" if error else "Sem erros reportados"
+            msg = f"❌ Falha ao enviar. {failed} erro(s). {error_msg}. Verifique os logs do Render.com."
+            self.message_user(request, msg, level='ERROR')
     
     test_push_notification.short_description = "🧪 Testar Push Notification"
     
