@@ -91,22 +91,62 @@ def send_push_notification(title, message, data=None, user=None):
     vapid_private_key = getattr(settings, 'VAPID_PRIVATE_KEY', None)
     vapid_claims_email = getattr(settings, 'VAPID_CLAIMS', {}).get("sub", "mailto:admin@example.com")
     
+    import sys
+    print(f"🔑 VAPID_PRIVATE_KEY configurada: {'Sim' if vapid_private_key else 'Não'}", file=sys.stdout, flush=True)
     logger.info(f"🔑 VAPID_PRIVATE_KEY configurada: {'Sim' if vapid_private_key else 'Não'}")
     logger.info(f"📧 VAPID_EMAIL: {vapid_claims_email}")
 
-    # Inicializa o objeto Vapid
-    logger.info("🔧 Inicializando objeto Vapid...")
-    try:
-        vapid = Vapid.from_pem(vapid_private_key.encode('utf-8'))
-        logger.info("✅ Objeto Vapid inicializado com sucesso")
-    except Exception as e:
-        logger.error(f"❌ Falha crítica ao carregar a VAPID_PRIVATE_KEY: {e}")
-        return {"sent": 0, "failed": subscriptions.count(), "error": f"Chave VAPID inválida: {e}"}
-
     if not vapid_private_key or 'placeholder' in vapid_private_key or not vapid_private_key.strip().startswith('-----BEGIN'):
         error_message = "VAPID_PRIVATE_KEY não está configurada corretamente em settings.py. Deve ser uma string PEM."
+        print(f"❌ {error_message}", file=sys.stdout, flush=True)
         logger.error(f"❌ {error_message}")
         return {"sent": 0, "failed": subscriptions.count(), "error": error_message}
+    
+    # Normaliza a chave VAPID (garante que tem quebras de linha corretas)
+    # Se a chave veio do Render.com sem \n, vamos adicionar
+    if isinstance(vapid_private_key, str):
+        # Remove espaços extras e garante que tem BEGIN e END
+        vapid_key_normalized = vapid_private_key.strip()
+        
+        # Se não tem quebras de linha, tenta adicionar (chave pode vir em uma linha)
+        if '\n' not in vapid_key_normalized:
+            # Remove espaços e quebras de linha existentes
+            vapid_key_normalized = vapid_key_normalized.replace(' ', '').replace('\n', '')
+            
+            # Tenta identificar onde devem estar as quebras de linha
+            if '-----BEGIN PRIVATE KEY-----' in vapid_key_normalized:
+                # Extrai o conteúdo entre BEGIN e END
+                begin_idx = vapid_key_normalized.find('-----BEGIN PRIVATE KEY-----')
+                end_idx = vapid_key_normalized.find('-----END PRIVATE KEY-----')
+                
+                if begin_idx != -1 and end_idx != -1:
+                    # Extrai o conteúdo da chave (sem os headers)
+                    key_content_start = begin_idx + len('-----BEGIN PRIVATE KEY-----')
+                    key_content = vapid_key_normalized[key_content_start:end_idx].strip()
+                    
+                    # Divide a chave em linhas de 64 caracteres (formato padrão PEM)
+                    # Mas mantém como está, pois pode estar em base64
+                    # Reconstroi com quebras de linha apenas no header/footer
+                    vapid_key_normalized = f"-----BEGIN PRIVATE KEY-----\n{key_content}\n-----END PRIVATE KEY-----"
+        
+        vapid_private_key = vapid_key_normalized
+        print(f"✅ Chave VAPID normalizada (primeiros 50 chars): {vapid_private_key[:50]}...", file=sys.stdout, flush=True)
+        logger.info(f"✅ Chave VAPID normalizada")
+    
+    # Valida que a chave pode ser parseada (mas não precisamos criar objeto Vapid)
+    # pywebpush vai fazer isso internamente
+    try:
+        # Testa se a chave pode ser parseada
+        test_vapid = Vapid.from_pem(vapid_private_key.encode('utf-8'))
+        print(f"✅ Chave VAPID validada (pode ser parseada)", file=sys.stdout, flush=True)
+        logger.info(f"✅ Chave VAPID validada")
+    except Exception as e:
+        error_msg = f"❌ Falha ao validar chave VAPID: {e}"
+        print(error_msg, file=sys.stdout, flush=True)
+        print(f"   Chave (primeiros 100 chars): {vapid_private_key[:100]}", file=sys.stdout, flush=True)
+        logger.error(error_msg)
+        logger.error(f"   Chave (primeiros 100 chars): {vapid_private_key[:100]}")
+        return {"sent": 0, "failed": subscriptions.count(), "error": f"Chave VAPID inválida: {e}"}
 
     sent = 0
     failed = 0
@@ -149,14 +189,22 @@ def send_push_notification(title, message, data=None, user=None):
             parsed_url = urlparse(subscription.endpoint)
             audience = f"{parsed_url.scheme}://{parsed_url.netloc}"
             
+            # pywebpush aceita objeto Vapid ou string PEM
+            # Vamos usar o objeto Vapid que já criamos
+            print(f"🔐 Preparando envio com pywebpush (audience: {audience})", file=sys.stdout, flush=True)
+            logger.info(f"🔐 Preparando envio com pywebpush")
+            
+            # pywebpush espera string PEM ou bytes, não objeto Vapid
+            # Vamos usar a string PEM normalizada
             response = webpush(
                 subscription_info=subscription_info,
                 data=json.dumps(payload),
-                vapid_private_key=vapid_private_key,
+                vapid_private_key=vapid_private_key,  # Usa string PEM
                 vapid_claims={
                     "sub": vapid_claims_email,
                     "aud": audience
-                }
+                },
+                ttl=43200  # 12 horas
             )
             
             sent += 1
