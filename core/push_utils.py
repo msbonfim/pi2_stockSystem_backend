@@ -102,14 +102,24 @@ def send_push_notification(title, message, data=None, user=None):
         logger.error(f"❌ {error_message}")
         return {"sent": 0, "failed": subscriptions.count(), "error": error_message}
     
+    # DEBUG: Mostra como a chave chegou
+    import sys
+    print(f"🔍 DEBUG - Chave VAPID recebida (tipo: {type(vapid_private_key)}, tamanho: {len(vapid_private_key) if vapid_private_key else 0})", file=sys.stdout, flush=True)
+    print(f"🔍 DEBUG - Primeiros 100 chars: {repr(vapid_private_key[:100]) if vapid_private_key else 'None'}", file=sys.stdout, flush=True)
+    logger.info(f"🔍 DEBUG - Chave VAPID recebida (tipo: {type(vapid_private_key)}, tamanho: {len(vapid_private_key) if vapid_private_key else 0})")
+    
     # Normaliza a chave VAPID (garante que tem quebras de linha corretas)
     # Se a chave veio do Render.com sem \n, vamos adicionar
     if isinstance(vapid_private_key, str):
         # Remove espaços extras e garante que tem BEGIN e END
         vapid_key_normalized = vapid_private_key.strip()
         
+        # Remove qualquer caractere de controle que possa estar causando problema
+        vapid_key_normalized = vapid_key_normalized.replace('\r', '')
+        
         # Se não tem quebras de linha, tenta adicionar (chave pode vir em uma linha)
         if '\n' not in vapid_key_normalized:
+            print(f"⚠️  Chave sem quebras de linha detectada, tentando normalizar...", file=sys.stdout, flush=True)
             # Remove espaços e quebras de linha existentes
             vapid_key_normalized = vapid_key_normalized.replace(' ', '').replace('\n', '')
             
@@ -128,24 +138,32 @@ def send_push_notification(title, message, data=None, user=None):
                     # Mas mantém como está, pois pode estar em base64
                     # Reconstroi com quebras de linha apenas no header/footer
                     vapid_key_normalized = f"-----BEGIN PRIVATE KEY-----\n{key_content}\n-----END PRIVATE KEY-----"
+                    print(f"✅ Chave normalizada (adicionadas quebras de linha)", file=sys.stdout, flush=True)
         
         vapid_private_key = vapid_key_normalized
-        print(f"✅ Chave VAPID normalizada (primeiros 50 chars): {vapid_private_key[:50]}...", file=sys.stdout, flush=True)
+        print(f"✅ Chave VAPID normalizada (primeiros 80 chars): {repr(vapid_private_key[:80])}", file=sys.stdout, flush=True)
         logger.info(f"✅ Chave VAPID normalizada")
+        logger.info(f"   Primeiros 80 chars: {repr(vapid_private_key[:80])}")
     
     # Valida que a chave pode ser parseada (mas não precisamos criar objeto Vapid)
     # pywebpush vai fazer isso internamente
     try:
         # Testa se a chave pode ser parseada
+        print(f"🔍 Tentando parsear chave VAPID...", file=sys.stdout, flush=True)
         test_vapid = Vapid.from_pem(vapid_private_key.encode('utf-8'))
         print(f"✅ Chave VAPID validada (pode ser parseada)", file=sys.stdout, flush=True)
         logger.info(f"✅ Chave VAPID validada")
     except Exception as e:
         error_msg = f"❌ Falha ao validar chave VAPID: {e}"
         print(error_msg, file=sys.stdout, flush=True)
-        print(f"   Chave (primeiros 100 chars): {vapid_private_key[:100]}", file=sys.stdout, flush=True)
+        print(f"   Tipo do erro: {type(e).__name__}", file=sys.stdout, flush=True)
+        print(f"   Chave completa (primeiros 200 chars): {repr(vapid_private_key[:200])}", file=sys.stdout, flush=True)
+        print(f"   Chave tem quebras de linha: {'Sim' if '\\n' in vapid_private_key else 'Não'}", file=sys.stdout, flush=True)
+        print(f"   Chave começa com BEGIN: {'Sim' if vapid_private_key.startswith('-----BEGIN') else 'Não'}", file=sys.stdout, flush=True)
+        print(f"   Chave termina com END: {'Sim' if vapid_private_key.strip().endswith('-----END PRIVATE KEY-----') else 'Não'}", file=sys.stdout, flush=True)
         logger.error(error_msg)
-        logger.error(f"   Chave (primeiros 100 chars): {vapid_private_key[:100]}")
+        logger.error(f"   Tipo do erro: {type(e).__name__}")
+        logger.error(f"   Chave (primeiros 200 chars): {repr(vapid_private_key[:200])}")
         return {"sent": 0, "failed": subscriptions.count(), "error": f"Chave VAPID inválida: {e}"}
 
     sent = 0
@@ -189,23 +207,33 @@ def send_push_notification(title, message, data=None, user=None):
             parsed_url = urlparse(subscription.endpoint)
             audience = f"{parsed_url.scheme}://{parsed_url.netloc}"
             
-            # pywebpush aceita objeto Vapid ou string PEM
-            # Vamos usar o objeto Vapid que já criamos
+            # DEBUG: Mostra a chave que será usada
             print(f"🔐 Preparando envio com pywebpush (audience: {audience})", file=sys.stdout, flush=True)
+            print(f"🔍 DEBUG - Chave que será usada (tamanho: {len(vapid_private_key)}, início: {repr(vapid_private_key[:60])})", file=sys.stdout, flush=True)
             logger.info(f"🔐 Preparando envio com pywebpush")
+            logger.info(f"🔍 Chave que será usada (tamanho: {len(vapid_private_key)})")
             
             # pywebpush espera string PEM ou bytes, não objeto Vapid
             # Vamos usar a string PEM normalizada
-            response = webpush(
-                subscription_info=subscription_info,
-                data=json.dumps(payload),
-                vapid_private_key=vapid_private_key,  # Usa string PEM
-                vapid_claims={
-                    "sub": vapid_claims_email,
-                    "aud": audience
-                },
-                ttl=43200  # 12 horas
-            )
+            try:
+                response = webpush(
+                    subscription_info=subscription_info,
+                    data=json.dumps(payload),
+                    vapid_private_key=vapid_private_key,  # Usa string PEM
+                    vapid_claims={
+                        "sub": vapid_claims_email,
+                        "aud": audience
+                    },
+                    ttl=43200  # 12 horas
+                )
+            except Exception as webpush_error:
+                # Log detalhado do erro do pywebpush
+                print(f"❌ ERRO NO WEBPUSH: {type(webpush_error).__name__}: {webpush_error}", file=sys.stdout, flush=True)
+                print(f"🔍 DEBUG - Chave usada (últimos 100 chars): {repr(vapid_private_key[-100:])}", file=sys.stdout, flush=True)
+                print(f"🔍 DEBUG - Chave tem \\n: {'Sim' if '\\n' in vapid_private_key else 'Não'}", file=sys.stdout, flush=True)
+                print(f"🔍 DEBUG - Chave tem \\r: {'Sim' if '\\r' in vapid_private_key else 'Não'}", file=sys.stdout, flush=True)
+                logger.error(f"❌ ERRO NO WEBPUSH: {type(webpush_error).__name__}: {webpush_error}")
+                raise  # Re-lança o erro para ser capturado pelo except externo
             
             sent += 1
             print(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso! Status: {response.status_code if hasattr(response, 'status_code') else 'OK'}", file=sys.stdout, flush=True)
