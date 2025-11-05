@@ -144,7 +144,7 @@ def send_push_notification(title, message, data=None, user=None):
             logger.error(f"   Endpoint: {subscription.endpoint[:100]}")
             
             # Log detalhado do erro
-            if e.response:
+            if hasattr(e, 'response') and e.response is not None:
                 status_code = e.response.status_code
                 logger.error(f"   Status Code: {status_code}")
                 logger.error(f"   Erro: {error_msg}")
@@ -173,7 +173,19 @@ def send_push_notification(title, message, data=None, user=None):
                     subscription.save()
                     logger.info(f"   🔄 Subscription {subscription.id} desativada pois não existe mais (status {status_code})")
             else:
-                logger.error(f"   Erro de requisição (sem resposta): {error_msg}")
+                # Erro sem resposta HTTP (pode ser 403 mas sem response object)
+                logger.error(f"   Erro de requisição (sem objeto response): {error_msg}")
+                # Tenta extrair status code da mensagem de erro
+                if "403" in error_msg or "Forbidden" in error_msg:
+                    logger.error(f"   ⚠️ Detectado 403 Forbidden na mensagem de erro")
+                    logger.error(f"   Isso geralmente indica:")
+                    logger.error(f"      - Chave VAPID privada não corresponde à pública")
+                    logger.error(f"      - Subscription foi criada com chave diferente")
+                    logger.error(f"      - VAPID_EMAIL incorreto")
+                    logger.error(f"   Endpoint completo: {subscription.endpoint[:150]}")
+                    subscription.active = False
+                    subscription.save()
+                    logger.info(f"   🔄 Subscription {subscription.id} desativada devido a 403 Forbidden")
     
     logger.info("=" * 60)
     logger.info(f"📊 RESULTADO FINAL: {sent} enviada(s), {failed} falha(s)")

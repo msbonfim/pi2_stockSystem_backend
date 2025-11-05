@@ -247,14 +247,9 @@ else:
 # --- Configuração VAPID para Push Notifications ---
 # A chave privada será inserida aqui automaticamente pelo script 'automatizar_chaves.py'.
 # Esta abordagem é mais robusta que ler de um arquivo.
-VAPID_PRIVATE_KEY = """
------BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgCqlwZxvzqKnRSHh3
-UFDJ4KmImtQp/82mlzvwKkFuojWhRANCAASYwF67TKnR37LX6AfQihOWf19ghDwV
-ooNEPjkjeq3nMVZNgMZhGJPabvTBVMNwvMwvvdYZpj53ewGYQCn2+ktL
------END PRIVATE KEY-----
-
-""".strip()
+# VAPID_PRIVATE_KEY deve ser configurada via variável de ambiente
+# NUNCA commite chaves privadas no repositório!
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
 
 VAPID_CLAIMS = {
     "sub": os.environ.get('VAPID_EMAIL', "mailto:admin@stockystem.com")  # Email de contato para VAPID

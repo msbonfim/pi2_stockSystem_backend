@@ -98,6 +98,14 @@ htmlcov/
 .tox/
 .hypothesis/
 
+# Chaves privadas e segredos
+*_private_key*
+*_private.key
+*.key
+*.pem
+*secret*
+*SECRET*
+
 # Jupyter Notebook
 .ipynb_checkpoints
 
