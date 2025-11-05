@@ -139,9 +139,17 @@ def send_push_notification(title, message, data=None, user=None):
             logger.info(f"📋 Headers VAPID gerados: {list(vapid_headers.keys())}")
             
             # Envia a requisição usando a biblioteca 'requests'
+            # IMPORTANTE: Web Push API requer Content-Type: application/json
+            headers = dict(vapid_headers)
+            headers['Content-Type'] = 'application/json'
+            
+            print(f"📤 Enviando payload: {json.dumps(payload, indent=2)}")
+            logger.info(f"📤 Payload: {json.dumps(payload)}")
+            logger.info(f"📋 Headers: {list(headers.keys())}")
+            
             response = requests.post(
                 subscription_info["endpoint"],
-                headers=vapid_headers,
+                headers=headers,
                 data=json.dumps(payload),
                 timeout=10
             )
@@ -149,6 +157,7 @@ def send_push_notification(title, message, data=None, user=None):
             response.raise_for_status()  # Lança um erro para status 4xx ou 5xx
             
             sent += 1
+            print(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso! Status: {response.status_code}")
             logger.info(f"✅ [{idx}/{subscription_count}] Push notification enviada com sucesso!")
             logger.info(f"   Status: {response.status_code}")
             logger.info(f"   Endpoint: {subscription.endpoint[:50]}...")
