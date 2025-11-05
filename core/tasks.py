@@ -16,6 +16,9 @@ def check_expiring_products_and_notify():
     Busca produtos próximos da validade (7 dias para críticos, 30 dias para avisos)
     e envia notificações por e-mail e push.
     """
+    print("\n" + "="*70)
+    print("🔔 EXECUTANDO: check_expiring_products_and_notify")
+    print("="*70)
     logger.info("=" * 60)
     logger.info("🔔 EXECUTANDO: check_expiring_products_and_notify")
     logger.info("=" * 60)
@@ -174,11 +177,15 @@ def check_low_stock_and_notify(**kwargs):
         min_quantity: Quantidade mínima para considerar estoque baixo (padrão: 2)
                       Pode ser passado via kwargs do schedule
     """
+    print("\n" + "="*70)
+    print("🔔 EXECUTANDO: check_low_stock_and_notify")
+    print("="*70)
     logger.info("=" * 60)
     logger.info("🔔 EXECUTANDO: check_low_stock_and_notify")
     logger.info("=" * 60)
     # Obtém min_quantity dos kwargs (pode vir do schedule) ou usa padrão
     min_quantity = kwargs.get('min_quantity', 2)
+    print(f"📊 Min quantity: {min_quantity}")
     logger.info(f"📊 Min quantity: {min_quantity}")
     # Busca produtos com quantidade menor que min_quantity
     low_stock_products = Product.objects.filter(
@@ -187,7 +194,9 @@ def check_low_stock_and_notify(**kwargs):
     ).order_by('quantity', 'name')
     
     if not low_stock_products.exists():
-        logger.info(f"Nenhum produto com estoque baixo encontrado (menos de {min_quantity} unidades).")
+        msg = f"Nenhum produto com estoque baixo encontrado (menos de {min_quantity} unidades)."
+        print(f"\n✅ {msg}")
+        logger.info(msg)
         return f"✅ Nenhum produto com estoque baixo encontrado. Tudo em ordem!"
     
     count = low_stock_products.count()

@@ -37,6 +37,13 @@ def send_push_notification(title, message, data=None, user=None):
         data: Dados adicionais (dict)
         user: Usuário específico (opcional, se None, envia para todos)
     """
+    # Logs FORÇADOS com print() para aparecer sempre
+    print("\n" + "="*70)
+    print(f"🚀 INICIANDO ENVIO DE PUSH NOTIFICATION")
+    print(f"📝 Título: {title}")
+    print(f"📝 Mensagem: {message}")
+    print("="*70)
+    
     logger.info("=" * 60)
     logger.info(f"🚀 INICIANDO ENVIO DE PUSH NOTIFICATION")
     logger.info(f"📝 Título: {title}")

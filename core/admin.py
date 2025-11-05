@@ -97,12 +97,53 @@ class NotificationAdmin(admin.ModelAdmin):
 
 @admin.register(PushSubscription)
 class PushSubscriptionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'endpoint', 'active', 'created_at')
+    list_display = ('id', 'endpoint_short', 'active', 'created_at')
     list_filter = ('active', 'created_at')
-    search_fields = ('endpoint', 'user__username')
-    readonly_fields = ('created_at',)
+    search_fields = ('endpoint',)
+    readonly_fields = ('endpoint', 'p256dh', 'auth', 'created_at')
     ordering = ('-created_at',)
     list_per_page = 20
+    
+    def endpoint_short(self, obj):
+        return obj.endpoint[:50] + '...' if len(obj.endpoint) > 50 else obj.endpoint
+    endpoint_short.short_description = 'Endpoint'
+    
+    actions = ['test_push_notification', 'delete_all_subscriptions']
+    
+    def test_push_notification(self, request, queryset):
+        """Testa envio de push notification"""
+        from .push_utils import send_push_notification
+        
+        total = queryset.count()
+        active = queryset.filter(active=True).count()
+        
+        if active == 0:
+            self.message_user(request, f"❌ Nenhuma subscription ativa selecionada. Total: {total}", level='ERROR')
+            return
+        
+        result = send_push_notification(
+            title="🧪 Teste de Notificação",
+            message="Esta é uma notificação de teste do Django Admin!",
+            data={"type": "test"}
+        )
+        
+        sent = result.get('sent', 0)
+        failed = result.get('failed', 0)
+        
+        if sent > 0:
+            self.message_user(request, f"✅ {sent} notificação(s) enviada(s) com sucesso! {failed} falha(s).", level='SUCCESS')
+        else:
+            self.message_user(request, f"❌ Falha ao enviar. {failed} erro(s). Verifique os logs do Render.com.", level='ERROR')
+    
+    test_push_notification.short_description = "🧪 Testar Push Notification"
+    
+    def delete_all_subscriptions(self, request, queryset):
+        """Deleta todas as subscriptions selecionadas"""
+        count = queryset.count()
+        queryset.delete()
+        self.message_user(request, f"✅ {count} subscription(s) deletada(s).", level='SUCCESS')
+    
+    delete_all_subscriptions.short_description = "🗑️ Deletar Subscriptions Selecionadas"
 
 
 # Customização dos modelos do Django Q para tradução
