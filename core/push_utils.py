@@ -45,10 +45,20 @@ def send_push_notification(title, message, data=None, user=None):
     
     subscriptions = PushSubscription.objects.filter(active=True)
     subscription_count = subscriptions.count()
+    
+    # Logs sempre visíveis, mesmo sem subscriptions
+    print(f"\n{'='*70}")
+    print(f"🔔 PUSH NOTIFICATION: {title}")
+    print(f"{'='*70}")
+    print(f"📊 Subscriptions ativas: {subscription_count}")
     logger.info(f"🔍 Subscriptions ativas encontradas: {subscription_count}")
     
     if not subscriptions.exists():
-        logger.info("❌ Nenhuma subscription ativa encontrada para envio de push notification")
+        msg = "❌ Nenhuma subscription ativa encontrada para envio de push notification"
+        print(msg)
+        logger.warning(msg)
+        print("💡 SOLUÇÃO: No navegador, limpe Service Worker e permita notificações novamente")
+        print(f"{'='*70}\n")
         return {"sent": 0, "failed": 0}
     
     if not VAPID_AVAILABLE:
@@ -150,6 +160,7 @@ def send_push_notification(title, message, data=None, user=None):
                 logger.error(f"   Erro: {error_msg}")
                 
                 # Tenta ler resposta do erro
+                error_response = None
                 try:
                     error_response = e.response.text[:200]
                     logger.error(f"   Resposta do servidor: {error_response}")
@@ -158,15 +169,14 @@ def send_push_notification(title, message, data=None, user=None):
                 
                 # 403 Forbidden geralmente indica chave VAPID incorreta ou subscription inválida
                 if status_code == 403:
-                    logger.error(f"   ⚠️ 403 Forbidden - Possíveis causas:")
-                    logger.error(f"      - Chave VAPID privada não corresponde à pública")
-                    logger.error(f"      - Subscription foi criada com chave diferente")
-                    logger.error(f"      - VAPID_EMAIL incorreto")
+                    logger.error(f"   ⚠️ 403 Forbidden - Subscription inválida detectada!")
+                    logger.error(f"   Motivo: {error_response if error_response else 'Chave VAPID não corresponde'}")
                     logger.error(f"   Endpoint completo: {subscription.endpoint[:150]}")
-                    # Desativa subscription com 403 também, pois indica que está inválida
-                    subscription.active = False
-                    subscription.save()
-                    logger.info(f"   🔄 Subscription {subscription.id} desativada devido a 403 Forbidden")
+                    # Deleta subscription com 403 - está definitivamente inválida
+                    subscription_id = subscription.id
+                    subscription.delete()
+                    logger.info(f"   🗑️ Subscription {subscription_id} DELETADA automaticamente")
+                    logger.warning(f"   💡 Execute: python manage.py fix_push_notifications para diagnosticar")
                 # 404 ou 410 = subscription não existe mais
                 elif status_code in [404, 410]:
                     subscription.active = False
@@ -178,15 +188,17 @@ def send_push_notification(title, message, data=None, user=None):
                 # Tenta extrair status code da mensagem de erro
                 if "403" in error_msg or "Forbidden" in error_msg:
                     logger.error(f"   ⚠️ Detectado 403 Forbidden na mensagem de erro")
-                    logger.error(f"   Isso geralmente indica:")
-                    logger.error(f"      - Chave VAPID privada não corresponde à pública")
-                    logger.error(f"      - Subscription foi criada com chave diferente")
-                    logger.error(f"      - VAPID_EMAIL incorreto")
+                    logger.error(f"   Motivo: Subscription criada com chave diferente da atual")
                     logger.error(f"   Endpoint completo: {subscription.endpoint[:150]}")
-                    subscription.active = False
-                    subscription.save()
-                    logger.info(f"   🔄 Subscription {subscription.id} desativada devido a 403 Forbidden")
+                    subscription_id = subscription.id
+                    subscription.delete()
+                    logger.info(f"   🗑️ Subscription {subscription_id} DELETADA automaticamente")
+                    logger.warning(f"   💡 Execute: python manage.py fix_push_notifications para diagnosticar")
     
+    # Logs finais sempre visíveis
+    print(f"\n{'='*70}")
+    print(f"📊 RESULTADO: {sent} enviada(s), {failed} falha(s)")
+    print(f"{'='*70}\n")
     logger.info("=" * 60)
     logger.info(f"📊 RESULTADO FINAL: {sent} enviada(s), {failed} falha(s)")
     logger.info("=" * 60)

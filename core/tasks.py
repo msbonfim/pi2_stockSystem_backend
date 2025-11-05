@@ -121,12 +121,16 @@ def _send_notifications_for_products(products, severity, description, today):
     email_result = _send_email_notification(title, message)
     
     # Envia push notifications
+    print(f"\n{'='*70}")
+    print(f"🚀 ENVIANDO PUSH NOTIFICATION - Produtos Próximos da Validade")
+    print(f"{'='*70}")
     logger.info(f"📤 Chamando send_push_notification para produtos próximos da validade...")
     push_result = send_push_notification(
         title=title,
         message=push_message,
         data={"type": "expiring_products", "count": count, "severity": severity.lower()}
     )
+    print(f"✅ Push resultado: {push_result}")
     logger.info(f"📤 Resultado do push: {push_result}")
     
     # Envia notificação desktop (Windows) - aparece no monitor
@@ -235,12 +239,16 @@ def check_low_stock_and_notify(**kwargs):
     email_result = _send_email_notification(title, message)
     
     # Envia push notifications
+    print(f"\n{'='*70}")
+    print(f"🚀 ENVIANDO PUSH NOTIFICATION - Estoque Baixo")
+    print(f"{'='*70}")
     logger.info(f"📤 Chamando send_push_notification para estoque baixo...")
     push_result = send_push_notification(
         title=title,
         message=push_message,
         data={"type": "low_stock", "count": count, "min_quantity": min_quantity}
     )
+    print(f"✅ Push resultado: {push_result}")
     logger.info(f"📤 Resultado do push: {push_result}")
     
     # Envia notificação desktop (Windows)
