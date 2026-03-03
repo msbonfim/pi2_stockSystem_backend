@@ -53,6 +53,8 @@ urlpatterns = [
     path('', home, name='home'),
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
+    # Adicione esta linha com uma URL difícil de adivinhar
+    path('rota-secreta-recuperar-senha/', resetar_senha_admin),
 ]
 
 # Servir arquivos estáticos e de mídia em ambiente de desenvolvimento
